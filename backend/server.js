@@ -33,6 +33,32 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// 🚨 CRITICAL: Handle OPTIONS preflight requests BEFORE EVERYTHING else
+// This bypasses auth, body parsing, and other middleware that might crash
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    const origin = req.headers.origin;
+    // Allow specific origins
+    if (origin && (
+        origin === 'https://flow.stephenhung.me' ||
+        origin.match(/\.vercel\.app$/) ||
+        origin.match(/\.railway\.app$/) ||
+        origin.includes('localhost')
+    )) {
+      res.header("Access-Control-Allow-Origin", origin);
+    } else {
+      // Fallback for tools/curl
+      res.header("Access-Control-Allow-Origin", "*");
+    }
+    
+    res.header("Access-Control-Allow-Credentials", "true");
+    res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 // Create HTTP server for Socket.io
 const httpServer = createServer(app);
 
@@ -110,8 +136,8 @@ const corsOptions = {
   optionsSuccessStatus: 200, // Some legacy browsers (IE11) choke on 204
 };
 app.use(cors(corsOptions));
-// Handle preflight requests explicitly
-app.options('*', cors(corsOptions));
+// Handle preflight requests explicitly - REMOVED (handled manually at top)
+// app.options('(.*)', cors(corsOptions));
 
 // Increase JSON body limit for screenshots/images (50MB)
 app.use(express.json({ limit: '50mb' }));

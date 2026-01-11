@@ -63,6 +63,11 @@ export async function verifyIdToken(idToken) {
  * Adds req.user with Firebase user info
  */
 export async function authMiddleware(req, res, next) {
+  // Allow preflight requests to bypass authentication
+  if (req.method === 'OPTIONS') {
+    return next();
+  }
+
   try {
     const authHeader = req.headers.authorization;
     
