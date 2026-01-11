@@ -23,34 +23,38 @@ import { fileURLToPath } from 'url';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 
+// 💥 Global Error Handlers - Log everything before crashing
+process.on('uncaughtException', (err) => {
+  console.error('💥 [FATAL] Uncaught Exception:', err);
+  console.error(err.stack);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('💥 [FATAL] Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load .env from root directory FIRST (before importing lib files that need env vars)
-// backend/ -> root = ../
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
+// Load .env - try multiple locations for compatibility
+dotenv.config(); // Try current dir
+dotenv.config({ path: path.resolve(__dirname, '../.env') }); // Try parent dir (root)
 
 const app = express();
+// Railway provides PORT env var automatically
 const PORT = process.env.PORT || 3001;
+const HOST = '0.0.0.0';
+
+console.log(`🚀 [INIT] Starting server initialization...`);
+console.log(`📅 [INIT] Time: ${new Date().toISOString()}`);
+console.log(`🌐 [INIT] Configured Port: ${PORT}`);
 
 // 🚨 CRITICAL: Handle OPTIONS preflight requests BEFORE EVERYTHING else
-// This bypasses auth, body parsing, and other middleware that might crash
+// This must be the first middleware to prevent any crash in body-parsing or auth
 app.use((req, res, next) => {
   if (req.method === 'OPTIONS') {
-    const origin = req.headers.origin;
-    // Allow specific origins
-    if (origin && (
-        origin === 'https://flow.stephenhung.me' ||
-        origin.match(/\.vercel\.app$/) ||
-        origin.match(/\.railway\.app$/) ||
-        origin.includes('localhost')
-    )) {
-      res.header("Access-Control-Allow-Origin", origin);
-    } else {
-      // Fallback for tools/curl
-      res.header("Access-Control-Allow-Origin", "*");
-    }
-    
+    const origin = req.headers.origin || "*";
+    res.header("Access-Control-Allow-Origin", origin);
     res.header("Access-Control-Allow-Credentials", "true");
     res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
     res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
@@ -72,6 +76,50 @@ const io = new SocketIOServer(httpServer, {
 
 // Store active pipeline jobs
 const pipelineJobs = new Map();
+
+// Rate limiting for expensive API calls (Marble + Gemini)
+// Track requests per IP: { ip: [timestamp1, timestamp2, ...] }
+const rateLimitStore = new Map();
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const RATE_LIMIT_MAX_REQUESTS = 2; // Max 2 generations per hour per IP
+
+// Simple rate limiting middleware
+function rateLimitMiddleware(req, res, next) {
+  const ip = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
+  
+  // Clean up old entries (older than 1 hour)
+  const now = Date.now();
+  const cutoff = now - RATE_LIMIT_WINDOW_MS;
+  
+  for (const [key, timestamps] of rateLimitStore.entries()) {
+    const filtered = timestamps.filter(ts => ts > cutoff);
+    if (filtered.length === 0) {
+      rateLimitStore.delete(key);
+    } else {
+      rateLimitStore.set(key, filtered);
+    }
+  }
+  
+  // Check current IP
+  const ipTimestamps = rateLimitStore.get(ip) || [];
+  const recentRequests = ipTimestamps.filter(ts => ts > cutoff);
+  
+  if (recentRequests.length >= RATE_LIMIT_MAX_REQUESTS) {
+    const oldestRequest = Math.min(...recentRequests);
+    const waitTime = Math.ceil((oldestRequest + RATE_LIMIT_WINDOW_MS - now) / 1000 / 60);
+    return res.status(429).json({
+      error: 'Rate limit exceeded',
+      message: `You can generate ${RATE_LIMIT_MAX_REQUESTS} scenes per hour. Please wait ${waitTime} minute(s) before trying again.`,
+      retryAfter: waitTime
+    });
+  }
+  
+  // Add current request
+  recentRequests.push(now);
+  rateLimitStore.set(ip, recentRequests);
+  
+  next();
+}
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
@@ -1163,8 +1211,9 @@ Give a helpful, engaging 2-3 sentence response. Include interesting facts, histo
 /**
  * POST /api/pipeline/start
  * Start a new world generation pipeline with real-time updates
+ * Rate limited to prevent excessive API costs
  */
-app.post('/api/pipeline/start', upload.single('image'), async (req, res) => {
+app.post('/api/pipeline/start', rateLimitMiddleware, upload.single('image'), async (req, res) => {
   const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   
   try {
@@ -1637,9 +1686,9 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // Listen on all interfaces (0.0.0.0) for Railway/cloud deployments
-const HOST = '0.0.0.0';
-httpServer.listen(PORT, HOST, () => {
-  console.log(`🚀 [PROXY] Server running on http://${HOST}:${PORT}`);
+const SERVER_HOST = '0.0.0.0';
+httpServer.listen(PORT, SERVER_HOST, () => {
+  console.log(`🚀 [PROXY] Server running on http://${SERVER_HOST}:${PORT}`);
   console.log(`🔌 [SOCKET] WebSocket server ready`);
   console.log(`📡 [PROXY] Marble API proxy ready`);
   console.log(`🔑 [PROXY] Using Marble API key: ${MARBLE_API_KEY?.substring(0, 10) || 'NOT SET'}...`);
