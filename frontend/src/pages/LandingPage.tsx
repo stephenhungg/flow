@@ -93,6 +93,23 @@ export function LandingPage() {
         transition={{ duration: 0.8, ease: 'easeOut' }}
       />
 
+      {/* Header - Library Link */}
+      <motion.div
+        className="fixed top-0 left-0 right-0 z-20 p-4 flex justify-end"
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: isZooming ? 0 : 1, y: 0 }}
+        transition={{ duration: 0.8, ease: 'easeOut' }}
+      >
+        <motion.button
+          onClick={() => window.location.hash = '#library'}
+          className="glass px-4 py-2 rounded-full font-mono text-sm text-white hover:bg-white/20 transition-colors"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          library
+        </motion.button>
+      </motion.div>
+
       {/* Main Content - fades out when zooming */}
       <motion.div 
         className="relative z-10 h-full flex flex-col items-center justify-center px-6"

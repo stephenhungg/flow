@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { FirstPersonScene } from './FirstPersonScene';
 import { SubtitleOverlay } from './SubtitleOverlay';
 import { EducationOverlay } from './EducationOverlay';
+import { SaveToLibraryModal } from './SaveToLibraryModal';
 import { orchestrateConcept, type GeminiOrchestrationResponse } from '../lib/orchestrateConcept';
 import { generateImageWithGemini } from '../lib/generateImage';
 import { convertImageToSplat } from '../lib/generateSplat';
@@ -24,6 +25,7 @@ export function EducationalScene({ concept, onExit }: EducationalSceneProps) {
   const [pipelineStep, setPipelineStep] = useState<string>('Initializing...');
   const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [showSaveModal, setShowSaveModal] = useState(false);
 
   // Step 1: Full pipeline - Orchestrate → Generate Image → Convert to Splat → Load Scene
   useEffect(() => {
@@ -289,17 +291,40 @@ export function EducationalScene({ concept, onExit }: EducationalSceneProps) {
         sources={orchestration.sources}
       />
 
-      {onExit && (
+      <div className="absolute top-6 right-6 flex gap-2 z-50">
         <motion.button
-          onClick={onExit}
-          className="absolute top-6 right-6 glass px-4 py-2 rounded-full font-mono text-sm text-white hover:bg-white/30 transition-colors z-50"
+          onClick={() => setShowSaveModal(true)}
+          className="glass px-4 py-2 rounded-full font-mono text-sm text-white hover:bg-white/30 transition-colors"
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
         >
-          exit
+          save to library
         </motion.button>
-      )}
+        {onExit && (
+          <motion.button
+            onClick={onExit}
+            className="glass px-4 py-2 rounded-full font-mono text-sm text-white hover:bg-white/30 transition-colors"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+          >
+            exit
+          </motion.button>
+        )}
+      </div>
+
+      {/* Save to Library Modal */}
+      <SaveToLibraryModal
+        isOpen={showSaveModal}
+        onClose={() => setShowSaveModal(false)}
+        concept={concept}
+        splatUrl={splatUrl}
+        onSaveComplete={() => {
+          setShowSaveModal(false);
+          // Optionally show a success message or navigate to library
+        }}
+      />
     </div>
   );
 }

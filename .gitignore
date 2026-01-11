@@ -1,11 +1,15 @@
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+
+# PID files
+.backend.pid
+.frontend.pid
 
 # Dependencies
 node_modules
@@ -19,6 +23,14 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+
+# Firebase service account keys
+server/serviceAccountKey.json
+serviceAccountKey.json
+*.json
+!package.json
+!package-lock.json
+!tsconfig*.json
 
 # Server logs and temp files
 /tmp/

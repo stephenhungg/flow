@@ -1,0 +1,23 @@
+{
+  "name": "flow-backend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.966.0",
+    "@aws-sdk/s3-request-presigner": "^3.966.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "firebase-admin": "^13.6.0",
+    "form-data": "^4.0.5",
+    "mongodb": "^6.18.0",
+    "multer": "^2.0.2",
+    "node-fetch": "^3.3.2"
+  }
+}
+

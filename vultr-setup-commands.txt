@@ -1,0 +1,112 @@
+# =====================================================
+# VULTR VPS SETUP COMMANDS
+# Run these commands after SSHing into 149.28.52.229
+# =====================================================
+
+# Step 1: Update system
+apt update && apt upgrade -y
+
+# Step 2: Install Node.js 20.x
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+apt-get install -y nodejs
+
+# Verify installation
+node --version
+npm --version
+
+# Step 3: Install Git and PM2
+apt install -y git
+npm install -g pm2
+
+# Step 4: Clone your repository (replace with your actual repo URL)
+cd /root
+git clone https://github.com/YOUR_USERNAME/flow.git
+cd flow
+
+# Step 5: Create .env file
+cat > .env << 'EOF'
+# Firebase (Client-side)
+VITE_FIREBASE_API_KEY=AIzaSyCae9VkebJ-yIFPD2FLCq7PtNtGvYVBK6o
+VITE_FIREBASE_AUTH_DOMAIN=flow-97c86.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=flow-97c86
+
+# Firebase Admin
+FIREBASE_PROJECT_ID=flow-97c86
+FIREBASE_SERVICE_ACCOUNT=YOUR_SERVICE_ACCOUNT_JSON_HERE
+
+# MongoDB Atlas
+MONGODB_URI=mongodb+srv://stpnhh_db_user:4G71QoR3zM6DBgVp@cluster0.zvunjk2.mongodb.net/flow?retryWrites=true&w=majority&appName=Cluster0
+
+# Vultr Object Storage
+VULTR_STORAGE_HOSTNAME=ewr1.vultrobjects.com
+VULTR_STORAGE_ACCESS_KEY=IZQDMI5BGC44XMV1S236
+VULTR_STORAGE_SECRET_KEY=GM9KarXid0qWMhiuyR2Oo8QVsU5ej1Hzue1YbJgh
+VULTR_STORAGE_BUCKET=flow
+
+# Server Port
+PORT=3001
+EOF
+
+# Step 6: Install backend dependencies
+cd backend
+npm install
+
+# Step 7: Start with PM2
+pm2 start server.js --name flow-backend
+pm2 startup
+pm2 save
+
+# Step 8: Check status
+pm2 status
+pm2 logs flow-backend
+
+# Step 9: Set up firewall
+ufw allow 22/tcp
+ufw allow 80/tcp
+ufw allow 443/tcp
+ufw allow 3001/tcp
+ufw --force enable
+ufw status
+
+# Step 10: Install and configure Nginx
+apt install -y nginx
+
+# Create Nginx config
+cat > /etc/nginx/sites-available/flow << 'NGINX'
+server {
+    listen 80;
+    server_name 149.28.52.229;
+
+    location /api {
+        proxy_pass http://localhost:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    location /health {
+        proxy_pass http://localhost:3001/health;
+    }
+}
+NGINX
+
+# Enable site
+ln -sf /etc/nginx/sites-available/flow /etc/nginx/sites-enabled/
+rm -f /etc/nginx/sites-enabled/default
+nginx -t
+systemctl restart nginx
+systemctl enable nginx
+
+# Test
+curl http://localhost:3001/health
+curl http://149.28.52.229/health
+
+echo ""
+echo "✅ Deployment complete!"
+echo "Backend API: http://149.28.52.229/api"
+
