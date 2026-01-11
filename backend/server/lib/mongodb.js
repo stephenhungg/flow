@@ -28,7 +28,16 @@ export async function connectToDatabase() {
   }
 
   try {
-    client = new MongoClient(MONGODB_URI);
+    // MongoDB connection options with SSL/TLS settings for Railway
+    const options = {
+      tls: true,
+      tlsAllowInvalidCertificates: false,
+      tlsAllowInvalidHostnames: false,
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+    };
+
+    client = new MongoClient(MONGODB_URI, options);
     await client.connect();
     db = client.db('flow');
     console.log('✅ [DB] Connected to MongoDB');
