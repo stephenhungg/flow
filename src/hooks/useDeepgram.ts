@@ -6,7 +6,7 @@ interface UseDeepgramOptions {
   onCommandDetected?: (command: string) => void;
 }
 
-const DEEPGRAM_API_KEY = import.meta.env.VITE_DEEPGRAM_API_KEY || 'addf9b125d8e6991e085a0abb1103e2cf140aafd'; // ✅ fallback for hackathon
+const DEEPGRAM_API_KEY = import.meta.env.VITE_DEEPGRAM_API_KEY ; // ✅ fallback for hackathon
 
 export function useDeepgram({ onTranscript, onCommandDetected }: UseDeepgramOptions = {}) {
   const [isListening, setIsListening] = useState(false);

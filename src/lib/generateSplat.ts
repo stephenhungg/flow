@@ -5,11 +5,11 @@
  * Documentation: Check @theworldlabs documentation for API details
  */
 
-const MARBLE_API_KEY = import.meta.env.VITE_MARBLE_API_KEY || '06XjKizwFxHRPaaUrTg1bmPtPql3QMhw';
+const MARBLE_API_KEY = import.meta.env.VITE_MARBLE_API_KEY ;
 // Use local proxy server to avoid CORS issues
 // If proxy not running, falls back to direct API (will fail with CORS)
 const MARBLE_API_URL = import.meta.env.VITE_MARBLE_PROXY_URL || 'http://localhost:3001/api/marble/convert';
-const MARBLE_DIRECT_URL = import.meta.env.VITE_MARBLE_API_URL || 'https://api.theworldlabs.com/v1/marble/convert';
+
 
 // Note: Check @theworldlabs documentation for exact API endpoint and format
 // API docs: https://worldlabs-api-reference.mintlify.app/api
@@ -151,62 +151,6 @@ export async function convertImageToSplat(imageUrlOrData: string, concept?: stri
   }
 }
 
-async function pollMarbleJob(jobId: string): Promise<string> {
-  const maxAttempts = 60; // 5 minutes max
-  let attempts = 0;
-
-  console.log(`⏳ [MARBLE] Polling job ${jobId} (max ${maxAttempts} attempts, 5s intervals)`);
-
-  while (attempts < maxAttempts) {
-    await new Promise(resolve => setTimeout(resolve, 5000)); // Poll every 5 seconds
-
-    const statusUrl = `${MARBLE_API_URL.replace('/convert', '')}/status/${jobId}`;
-    console.log(`🔄 [MARBLE] Polling attempt ${attempts + 1}/${maxAttempts}: ${statusUrl}`);
-
-    const response = await fetch(statusUrl, {
-      headers: {
-        'Authorization': `Bearer ${MARBLE_API_KEY}`,
-      }
-    });
-
-    if (!response.ok) {
-      console.error(`❌ [MARBLE] Status check failed: ${response.status}`);
-      throw new Error(`Failed to check Marble job status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    console.log(`📊 [MARBLE] Job status:`, data);
-
-    if (data.status === 'completed') {
-      if (data.splat_url) {
-        console.log('✅ [MARBLE] Job completed! Splat URL:', data.splat_url);
-        console.log('💰 [COST] Marble conversion completed successfully');
-        return data.splat_url;
-      }
-      if (data.splat_data) {
-        console.log('✅ [MARBLE] Job completed! Splat data received (base64)');
-        console.log('💰 [COST] Marble conversion completed successfully');
-        const blob = await base64ToBlob(data.splat_data, 'application/octet-stream');
-        return URL.createObjectURL(blob);
-      }
-      throw new Error('Job completed but no splat_url or splat_data found');
-    }
-
-    if (data.status === 'failed') {
-      console.error('❌ [MARBLE] Job failed:', data.error || 'Unknown error');
-      console.error('💰 [COST] Marble conversion failed - check if you were charged');
-      throw new Error(`Marble conversion failed: ${data.error || 'Unknown error'}`);
-    }
-
-    // Status is 'processing' or 'pending', continue polling
-    console.log(`⏳ [MARBLE] Job status: ${data.status}, continuing to poll...`);
-    attempts++;
-  }
-
-  console.error('❌ [MARBLE] Polling timeout after 5 minutes');
-  console.error('💰 [COST] Marble conversion timeout - check job status manually');
-  throw new Error('Marble conversion timeout after 5 minutes');
-}
 
 function base64ToBlob(base64: string, mimeType: string): Blob {
   const byteCharacters = atob(base64);

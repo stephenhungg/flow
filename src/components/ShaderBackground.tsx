@@ -79,7 +79,11 @@ const fragmentShader = `
   }
 `
 
-export function ShaderBackground() {
+interface ShaderBackgroundProps {
+  scale?: number;
+}
+
+export function ShaderBackground({ scale = 1 }: ShaderBackgroundProps = { scale: 1 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animationRef = useRef<number>(null)
   const startTimeRef = useRef<number>(Date.now())
@@ -187,11 +191,19 @@ export function ShaderBackground() {
     }
   }, [])
 
+  useEffect(() => {
+    if (canvasRef.current) {
+      canvasRef.current.style.transform = `scale(${scale})`;
+      canvasRef.current.style.transformOrigin = 'center center';
+      canvasRef.current.style.transition = 'transform 2.3s cubic-bezier(0.16, 1, 0.3, 1)';
+    }
+  }, [scale])
+
   return (
     <canvas
       ref={canvasRef}
       className="fixed inset-0 w-full h-full"
-      style={{ zIndex: -1 }}
+      style={{ zIndex: 0 }}
     />
   )
 }

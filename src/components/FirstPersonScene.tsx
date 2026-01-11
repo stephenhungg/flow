@@ -19,7 +19,7 @@ export function FirstPersonScene({ splatUrl, onSceneReady }: FirstPersonScenePro
   const [cameraState, setCameraState] = useState<THREE.PerspectiveCamera | null>(null);
 
   // Initialize controls - will be enabled once camera is ready
-  const controls = useFirstPersonControls(cameraState, cameraReady);
+  // const controls = useFirstPersonControls(cameraState, cameraReady);
 
   useEffect(() => {
     if (!mountRef.current) return;

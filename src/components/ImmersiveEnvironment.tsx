@@ -13,7 +13,7 @@ export function ImmersiveEnvironment({ sceneName, onExit }: ImmersiveEnvironment
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;
     renderer: THREE.WebGLRenderer;
-    animationId: number;
+    animationId: number | undefined;
   } | null>(null);
 
   useEffect(() => {
@@ -109,7 +109,7 @@ export function ImmersiveEnvironment({ sceneName, onExit }: ImmersiveEnvironment
     camera.lookAt(0, 0, 0);
 
     // Animation loop
-    let animationId: number;
+    let animationId: number | undefined = undefined;
     const animate = () => {
       animationId = requestAnimationFrame(animate);
       

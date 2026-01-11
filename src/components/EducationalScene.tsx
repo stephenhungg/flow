@@ -215,6 +215,7 @@ export function EducationalScene({ concept, onExit }: EducationalSceneProps) {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
           className="text-center max-w-md"
         >
           <p className="font-mono text-white text-glow mb-4 text-xl">
