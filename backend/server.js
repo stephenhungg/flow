@@ -81,17 +81,19 @@ export { io, emitPipelineUpdate, pipelineJobs };
 connectToDatabase().catch(console.error);
 
 // Enable CORS for all routes
-app.use(cors({
+const corsOptions = {
   origin: [
     'http://localhost:5173',
     'http://localhost:3000',
     'https://flow.stephenhung.me',
-    'https://flow-git-main-stephen-hungs-projects-d01c13ef.vercel.app',
-    'https://flow-f295vyvxr-stephen-hungs-projects-d01c13ef.vercel.app',
-    /\.vercel\.app$/, // Allow all Vercel preview deployments
+    /\.vercel\.app$/,
+    /\.railway\.app$/,
   ],
   credentials: true,
-}));
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+app.use(cors(corsOptions));
 // Increase JSON body limit for screenshots/images (50MB)
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -1112,7 +1114,7 @@ Give a helpful, engaging 2-3 sentence response. Include interesting facts, histo
  * POST /api/pipeline/start
  * Start a new world generation pipeline with real-time updates
  */
-app.post('/api/pipeline/start', authMiddleware, upload.single('image'), async (req, res) => {
+app.post('/api/pipeline/start', upload.single('image'), async (req, res) => {
   const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   
   try {
@@ -1563,14 +1565,25 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+// Global error handler (must be before catch-all)
+app.use((err, req, res, next) => {
+  console.error('❌ [ERROR] Unhandled error:', err);
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal server error',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
+});
+
 // Catch-all for debugging (must be LAST)
 app.use((req, res) => {
   console.log(`❌ [PROXY] 404 - Route not found: ${req.method} ${req.path}`);
   res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` });
 });
 
-httpServer.listen(PORT, () => {
-  console.log(`🚀 [PROXY] Server running on http://localhost:${PORT}`);
+// Listen on all interfaces (0.0.0.0) for Railway/cloud deployments
+const HOST = process.env.HOST || '0.0.0.0';
+httpServer.listen(PORT, HOST, () => {
+  console.log(`🚀 [PROXY] Server running on http://${HOST}:${PORT}`);
   console.log(`🔌 [SOCKET] WebSocket server ready`);
   console.log(`📡 [PROXY] Marble API proxy ready`);
   console.log(`🔑 [PROXY] Using Marble API key: ${MARBLE_API_KEY.substring(0, 10)}...`);

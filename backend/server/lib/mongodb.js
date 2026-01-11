@@ -28,22 +28,33 @@ export async function connectToDatabase() {
   }
 
   try {
-    // MongoDB connection options with SSL/TLS settings for Railway
-    const options = {
-      tls: true,
-      tlsAllowInvalidCertificates: false,
-      tlsAllowInvalidHostnames: false,
-      serverSelectionTimeoutMS: 10000,
+    // Connection options for better compatibility with Railway/cloud deployments
+    const clientOptions = {
+      serverSelectionTimeoutMS: 10000, // Timeout after 10 seconds
+      connectTimeoutMS: 10000,
       socketTimeoutMS: 45000,
+      // Retry logic
+      retryWrites: true,
+      retryReads: true,
+      // SSL/TLS options - let MongoDB driver handle SSL automatically
+      // For mongodb+srv:// connections, SSL is required and handled automatically
     };
 
-    client = new MongoClient(MONGODB_URI, options);
+    client = new MongoClient(MONGODB_URI, clientOptions);
     await client.connect();
+    
+    // Test the connection
+    await client.db('admin').command({ ping: 1 });
+    
     db = client.db('flow');
     console.log('✅ [DB] Connected to MongoDB');
     return { client, db };
   } catch (error) {
     console.error('❌ [DB] MongoDB connection error:', error);
+    console.error('❌ [DB] Make sure:');
+    console.error('   1. MONGODB_URI is correct');
+    console.error('   2. MongoDB Atlas Network Access allows Railway IPs (or 0.0.0.0/0)');
+    console.error('   3. Database user credentials are correct');
     throw error;
   }
 }
