@@ -1625,13 +1625,27 @@ app.use((req, res) => {
   res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` });
 });
 
+// Process-level error handlers to prevent crashes
+process.on('uncaughtException', (error) => {
+  console.error('❌ [PROCESS] Uncaught Exception:', error);
+  // Don't exit - keep server running
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ [PROCESS] Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't exit - keep server running
+});
+
 // Listen on all interfaces (0.0.0.0) for Railway/cloud deployments
 const HOST = '0.0.0.0';
 httpServer.listen(PORT, HOST, () => {
   console.log(`🚀 [PROXY] Server running on http://${HOST}:${PORT}`);
   console.log(`🔌 [SOCKET] WebSocket server ready`);
   console.log(`📡 [PROXY] Marble API proxy ready`);
-  console.log(`🔑 [PROXY] Using Marble API key: ${MARBLE_API_KEY.substring(0, 10)}...`);
+  console.log(`🔑 [PROXY] Using Marble API key: ${MARBLE_API_KEY?.substring(0, 10) || 'NOT SET'}...`);
   console.log(`✅ [PROXY] Routes registered: POST /api/marble/convert, GET /health`);
   console.log(`📚 [PROXY] API docs: https://worldlabs-api-reference.mintlify.app/api`);
+}).on('error', (error) => {
+  console.error('❌ [SERVER] Failed to start:', error);
+  process.exit(1);
 });

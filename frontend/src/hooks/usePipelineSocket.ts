@@ -4,7 +4,6 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { useAuth } from '../contexts/AuthContext';
 
 export type PipelineStage = 
   | 'idle'
@@ -44,7 +43,6 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export function usePipelineSocket() {
   const socketRef = useRef<Socket | null>(null);
-  const { getIdToken } = useAuth();
   const [state, setState] = useState<PipelineState>({
     jobId: null,
     stage: 'idle',
@@ -133,11 +131,6 @@ export function usePipelineSocket() {
     }));
 
     try {
-      const token = await getIdToken();
-      if (!token) {
-        throw new Error('Please sign in to generate worlds');
-      }
-
       const formData = new FormData();
       formData.append('concept', concept);
       if (imageFile) {
@@ -147,11 +140,9 @@ export function usePipelineSocket() {
         formData.append('quality', quality);
       }
 
+      // Pipeline doesn't require authentication - no auth headers needed
       const response = await fetch(`${API_URL}/api/pipeline/start`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
         body: formData,
       });
 
@@ -179,7 +170,7 @@ export function usePipelineSocket() {
       }));
       throw error;
     }
-  }, [getIdToken]);
+  }, []);
   // Reset state
   const reset = useCallback(() => {
     setState({
