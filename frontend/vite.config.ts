@@ -10,5 +10,8 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    sourcemap: false, // Disable source maps in production to avoid blob URL issues
+  },
 })
 
