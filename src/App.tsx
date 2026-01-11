@@ -1,42 +1,60 @@
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Mic } from 'lucide-react';
 import { SiReact, SiTypescript, SiThreedotjs, SiGoogle, SiMongodb } from 'react-icons/si';
 import { ShaderBackground } from './components/ShaderBackground';
 import { LoadingScreen } from './components/LoadingScreen';
 import { DecryptedText } from './components/DecryptedText';
+import { EducationalScene } from './components/EducationalScene';
+import { useDeepgram } from './hooks/useDeepgram';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
-  const [isListening, setIsListening] = useState(false);
-  const [typedText, setTypedText] = useState('');
-  const fullText = "ancient rome";
-  const [showFullText, setShowFullText] = useState(false);
+  const [commandDetected, setCommandDetected] = useState<string | null>(null);
+  const [showEducationalScene, setShowEducationalScene] = useState(false);
 
-  useEffect(() => {
-    if (isListening && !showFullText) {
-      let i = 0;
-      const typingInterval = setInterval(() => {
-        setTypedText(fullText.substring(0, i));
-        i++;
-        if (i > fullText.length) {
-          clearInterval(typingInterval);
-          setShowFullText(true);
-        }
-      }, 100);
-      return () => clearInterval(typingInterval);
-    } else if (!isListening) {
-      setTypedText('');
-      setShowFullText(false);
-    }
-  }, [isListening, showFullText]);
+  const {
+    isListening,
+    transcript,
+    error,
+    startListening,
+    stopListening,
+  } = useDeepgram({
+    onCommandDetected: (command) => {
+      console.log('Command detected:', command);
+      setCommandDetected(command);
+      // Stop listening and launch educational scene
+      stopListening();
+      // Small delay for smooth transition
+      setTimeout(() => {
+        setShowEducationalScene(true);
+      }, 500);
+    },
+  });
 
   const handleMicClick = () => {
-    setIsListening(!isListening);
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
+    }
   };
 
   if (isLoading) {
     return <LoadingScreen onComplete={() => setIsLoading(false)} minDuration={1500} />;
+  }
+
+  // Show educational scene when command is detected
+  if (showEducationalScene && commandDetected) {
+    return (
+      <EducationalScene 
+        concept={commandDetected}
+        onExit={() => {
+          setShowEducationalScene(false);
+          setCommandDetected(null);
+        }}
+      />
+    );
   }
 
   return (
@@ -107,15 +125,30 @@ export default function App() {
             <div className="glass rounded-full px-6 py-3 min-w-[280px] md:min-w-[320px]">
               {isListening ? (
                 <span className="font-mono text-sm text-white/90 text-glow">
-                  <span className="text-white">{typedText}</span>
+                  {transcript ? (
+                    <span className="text-white">{transcript}</span>
+                  ) : (
+                    <span className="text-white/60">listening...</span>
+                  )}
                   <motion.span
                     className="inline-block w-0.5 h-4 bg-white ml-1"
                     animate={{ opacity: [0, 1, 0] }}
                     transition={{ duration: 0.8, repeat: Infinity }}
                   />
                 </span>
+              ) : commandDetected ? (
+                <span className="font-mono text-sm text-white text-glow">
+                  showing {commandDetected}...
+                </span>
+              ) : transcript ? (
+                <span className="font-mono text-sm text-white/80 text-glow">
+                  {transcript}
+                </span>
               ) : (
                 <span className="font-mono text-sm text-white/60">try saying "show me ancient rome"</span>
+              )}
+              {error && (
+                <span className="font-mono text-xs text-red-400 block mt-1">{error}</span>
               )}
             </div>
           </motion.div>
