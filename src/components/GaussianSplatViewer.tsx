@@ -35,7 +35,7 @@ export const GaussianSplatViewer = ({ splatUrl, onLoaded }: GaussianSplatViewerP
     
     const renderer = new THREE.WebGLRenderer({
       antialias: true
-    } as any);
+    });
     renderer.setSize(renderWidth, renderHeight);
     container.appendChild(renderer.domElement);
 
@@ -49,7 +49,7 @@ export const GaussianSplatViewer = ({ splatUrl, onLoaded }: GaussianSplatViewerP
       renderer: renderer as any,
       camera: camera as any,
       useBuiltInControls: true,
-    } as any);
+    });
 
 
     // Initialize viewer
@@ -71,12 +71,12 @@ export const GaussianSplatViewer = ({ splatUrl, onLoaded }: GaussianSplatViewerP
           console.error('Error loading splat scene:', err);
           setError(`Failed to load 3D scene: ${err.message}`);
           setIsLoading(false);
-        } as any);
+        });
     }).catch((err: Error) => {
       console.error('Error initializing viewer:', err);
       setError(`Failed to initialize viewer: ${err.message}`);
       setIsLoading(false);
-    } as any);
+    });
 
     // Keyboard controls for WASD movement
     const handleKeyDown = (e: KeyboardEvent) => {
