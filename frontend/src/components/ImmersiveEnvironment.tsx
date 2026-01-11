@@ -167,8 +167,8 @@ export function ImmersiveEnvironment({ sceneName, onExit }: ImmersiveEnvironment
       {onExit && (
         <motion.button
           onClick={onExit}
-          className="absolute top-6 right-6 glass px-4 py-2 rounded-full font-mono text-sm text-white hover:bg-white/30 transition-colors"
-          initial={{ opacity: 0, y: -20 }}
+          className="absolute bottom-6 right-6 glass px-4 py-2 rounded-full font-mono text-sm text-white hover:bg-white/30 transition-colors"
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
         >

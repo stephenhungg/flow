@@ -4,6 +4,15 @@
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
+export interface OrchestrationData {
+  learningObjectives: string[];
+  keyFacts: string[];
+  narrationScript: string;
+  subtitleLines: Array<{ text: string; startTime: number; endTime: number }>;
+  callouts: Array<{ id: string; text: string; position: { x: number; y: number; z: number } }>;
+  sources: Array<{ title: string; url: string }>;
+}
+
 export interface Scene {
   _id: string;
   title: string;
@@ -12,10 +21,15 @@ export interface Scene {
   creatorId: string;
   creatorName: string;
   splatUrl: string;
-  thumbnailBase64?: string | null;
+  colliderMeshUrl?: string;
+  worldId?: string;
+  hasCollider?: boolean;
+  thumbnailUrl?: string | null;
+  animatedThumbnailUrl?: string | null;
   tags: string[];
   viewCount: number;
   createdAt: string;
+  orchestration?: OrchestrationData | null;
 }
 
 export interface PaginatedScenes {
@@ -117,5 +131,79 @@ export async function getUserScenes(userId: string): Promise<Scene[]> {
   }
   const data = await response.json();
   return data.scenes;
+}
+
+/**
+ * Get current user's scenes (including private)
+ */
+export async function getMyScenes(token: string): Promise<Scene[]> {
+  const response = await fetch(`${API_URL}/api/users/me/scenes`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to fetch your scenes');
+  }
+  const data = await response.json();
+  return data.scenes;
+}
+
+/**
+ * Create scene from external splat URL (auto-save from pipeline)
+ * Also supports collider mesh URL for physics and orchestration data
+ */
+export async function createSceneFromUrl(
+  token: string,
+  data: {
+    title: string;
+    description?: string;
+    concept: string;
+    tags?: string[];
+    isPublic?: boolean;
+    splatUrl: string;
+    colliderMeshUrl?: string;
+    worldId?: string;
+    orchestration?: OrchestrationData | null;
+    thumbnailBase64?: string;
+  }
+): Promise<Scene> {
+  const response = await fetch(`${API_URL}/api/scenes/from-url`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      title: data.title,
+      description: data.description,
+      concept: data.concept,
+      tags: data.tags,
+      isPublic: data.isPublic ?? true,
+      splatUrl: data.splatUrl,
+      colliderMeshUrl: data.colliderMeshUrl,
+      worldId: data.worldId,
+      orchestration: data.orchestration,
+      thumbnailBase64: data.thumbnailBase64,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to create scene');
+  }
+
+  return response.json();
+}
+
+/**
+ * Get proxied splat URL to bypass CORS
+ * Use this when loading splats from Vultr Object Storage
+ */
+export function getProxiedSplatUrl(originalUrl: string): string {
+  if (!originalUrl.includes('vultrobjects.com')) {
+    return originalUrl; // Not a Vultr URL, return as-is
+  }
+  return `${API_URL}/api/proxy/splat?url=${encodeURIComponent(originalUrl)}`;
 }
 

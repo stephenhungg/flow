@@ -17,7 +17,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 const VULTR_STORAGE_HOSTNAME = process.env.VULTR_STORAGE_HOSTNAME || 'ewr1.vultrobjects.com';
 const VULTR_STORAGE_ACCESS_KEY = process.env.VULTR_STORAGE_ACCESS_KEY;
 const VULTR_STORAGE_SECRET_KEY = process.env.VULTR_STORAGE_SECRET_KEY;
-const VULTR_STORAGE_BUCKET = process.env.VULTR_STORAGE_BUCKET || 'flow';
+const VULTR_STORAGE_BUCKET = process.env.VULTR_STORAGE_BUCKET || 'flow-bucket';
 
 if (!VULTR_STORAGE_ACCESS_KEY || !VULTR_STORAGE_SECRET_KEY) {
   console.warn('⚠️ [STORAGE] Vultr Object Storage credentials not configured');

@@ -31,15 +31,11 @@ export type GeminiOrchestrationResponse = {
   sources: Source[];
 };
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export async function orchestrateConcept(
   transcript: string
 ): Promise<GeminiOrchestrationResponse> {
-  if (!GEMINI_API_KEY) {
-    throw new Error('VITE_GEMINI_API_KEY not found');
-  }
-
   // Find matching scene
   const scene = findSceneByConcept(transcript);
   
@@ -66,16 +62,16 @@ Return as JSON matching this structure:
 }`;
 
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`, {
+    // Use backend proxy to avoid CORS
+    const response = await fetch(`${API_URL}/api/gemini/orchestrate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }]
-      })
+      body: JSON.stringify({ prompt })
     });
 
     if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status}`);
+      const error = await response.json();
+      throw new Error(error.error || `API error: ${response.status}`);
     }
 
     const data = await response.json();

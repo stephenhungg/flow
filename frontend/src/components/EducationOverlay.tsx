@@ -24,36 +24,36 @@ export function EducationOverlay({
   return (
     <>
       <motion.div
-        className="fixed top-6 left-6 z-40 max-w-md"
+        className="fixed top-6 left-6 z-40 max-w-md max-h-[calc(100vh-48px)] flex flex-col"
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <div className="glass rounded-lg p-4 backdrop-blur-md">
+        <div className="glass-strong rounded-lg p-4 backdrop-blur-md overflow-hidden flex flex-col">
           {!isMinimized ? (
             <>
-              <div className="flex items-start justify-between mb-3">
-                <h2 className="font-display text-xl text-white text-glow">
+              <div className="flex items-start justify-between mb-3 flex-shrink-0">
+                <h2 className="font-display text-xl text-white text-glow pr-4">
                   {concept}
                 </h2>
                 <button
                   onClick={() => setIsMinimized(true)}
-                  className="text-white/60 hover:text-white transition-colors"
+                  className="text-white/70 hover:text-white transition-colors flex-shrink-0"
                 >
                   <X size={20} />
                 </button>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar">
                 {/* Learning Objectives */}
                 <div>
-                  <h3 className="font-mono text-xs text-white/60 mb-2 uppercase tracking-wider">
+                  <h3 className="font-mono text-xs text-white/80 mb-2 uppercase tracking-wider">
                     Learning Objectives
                   </h3>
                   <ul className="space-y-1">
                     {learningObjectives.map((obj, i) => (
-                      <li key={i} className="font-mono text-sm text-white/90 flex items-start">
-                        <span className="text-white/40 mr-2">•</span>
+                      <li key={i} className="font-mono text-sm text-white flex items-start">
+                        <span className="text-white/60 mr-2">•</span>
                         <span>{obj}</span>
                       </li>
                     ))}
@@ -62,14 +62,14 @@ export function EducationOverlay({
 
                 {/* Key Facts */}
                 <div>
-                  <h3 className="font-mono text-xs text-white/60 mb-2 uppercase tracking-wider">
+                  <h3 className="font-mono text-xs text-white/80 mb-2 uppercase tracking-wider">
                     Key Facts
                   </h3>
                   <ul className="space-y-2">
                     {keyFacts.map((fact, i) => (
-                      <li key={i} className="font-mono text-xs text-white/80">
+                      <li key={i} className="font-mono text-xs text-white/95">
                         <span>{fact.text}</span>
-                        <span className="text-white/40 ml-2">— {fact.source}</span>
+                        <span className="text-white/60 ml-2">— {fact.source}</span>
                       </li>
                     ))}
                   </ul>

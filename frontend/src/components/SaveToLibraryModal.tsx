@@ -5,22 +5,30 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
-import { createScene } from '../lib/api';
+import { createScene, createSceneFromUrl, type OrchestrationData } from '../lib/api';
 
 interface SaveToLibraryModalProps {
   isOpen: boolean;
   onClose: () => void;
   concept: string;
   splatUrl: string;
+  colliderMeshUrl?: string;
+  worldId?: string;
+  orchestration?: OrchestrationData | null;
+  thumbnailDataUrl?: string | null;
   onSaveComplete?: () => void;
 }
 
-export function SaveToLibraryModal({ 
-  isOpen, 
-  onClose, 
-  concept, 
+export function SaveToLibraryModal({
+  isOpen,
+  onClose,
+  concept,
   splatUrl,
-  onSaveComplete 
+  colliderMeshUrl,
+  worldId,
+  orchestration,
+  thumbnailDataUrl,
+  onSaveComplete
 }: SaveToLibraryModalProps) {
   const { dbUser, getIdToken } = useAuth();
   const [title, setTitle] = useState(concept);
@@ -47,7 +55,7 @@ export function SaveToLibraryModal({
     e.preventDefault();
     
     if (!dbUser) {
-      alert('You must be signed in to save scenes');
+      setError('You must be signed in (not in offline mode) to save scenes. Please sign out and sign in again.');
       return;
     }
 
@@ -60,35 +68,124 @@ export function SaveToLibraryModal({
       setSaving(true);
       setError(null);
 
+      console.log('📚 [SAVE] Starting save to library...');
+      console.log('📚 [SAVE] Splat URL:', splatUrl);
+
       const token = await getIdToken();
       if (!token) {
-        throw new Error('Not authenticated');
+        throw new Error('Not authenticated - please sign in again');
       }
 
-      // Download the splat file
-      const response = await fetch(splatUrl);
-      if (!response.ok) {
-        throw new Error('Failed to download splat file');
+      const isExternalUrl = splatUrl.startsWith('http://') || splatUrl.startsWith('https://');
+
+      // Convert thumbnail data URL to base64 string (remove data:image/png;base64, prefix)
+      const thumbnailBase64 = thumbnailDataUrl
+        ? thumbnailDataUrl.replace(/^data:image\/\w+;base64,/, '')
+        : undefined;
+
+      // For external URLs, use backend to download (avoids CORS issues)
+      if (isExternalUrl && !splatUrl.includes('localhost')) {
+        console.log('📚 [SAVE] Using backend to download external URL...');
+        console.log('📚 [SAVE] Collider mesh:', colliderMeshUrl || 'none');
+        console.log('📚 [SAVE] Orchestration:', orchestration ? 'yes' : 'none');
+        console.log('📚 [SAVE] Thumbnail:', thumbnailBase64 ? 'yes' : 'none');
+        const scene = await createSceneFromUrl(token, {
+          title: title.trim(),
+          description: description.trim() || undefined,
+          concept,
+          tags: tags.length > 0 ? tags : undefined,
+          isPublic,
+          splatUrl,
+          colliderMeshUrl,
+          worldId,
+          orchestration,
+          thumbnailBase64,
+        });
+        console.log('📚 [SAVE] Scene saved successfully:', scene);
+        onSaveComplete?.();
+        onClose();
+        return;
       }
 
-      const blob = await response.blob();
-      const file = new File([blob], `${concept}.spz`, { type: 'application/octet-stream' });
+      // For local files, download and upload manually
+      console.log('📚 [SAVE] Downloading local splat file...');
+      let blob: Blob;
+      
+      try {
+        const response = await fetch(splatUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to download splat file: ${response.status} ${response.statusText}`);
+        }
+        blob = await response.blob();
+        console.log('📚 [SAVE] Downloaded blob:', blob.size, 'bytes');
+      } catch (fetchErr: any) {
+        console.error('📚 [SAVE] Fetch error:', fetchErr);
+        // If CORS fails, try the URL-based approach
+        if (fetchErr.message.includes('CORS') || fetchErr.message.includes('Failed to fetch')) {
+          console.log('📚 [SAVE] CORS issue, trying backend download...');
+          const thumbnailBase64 = thumbnailDataUrl
+            ? thumbnailDataUrl.replace(/^data:image\/\w+;base64,/, '')
+            : undefined;
+          const scene = await createSceneFromUrl(token, {
+            title: title.trim(),
+            description: description.trim() || undefined,
+            concept,
+            tags: tags.length > 0 ? tags : undefined,
+            isPublic,
+            splatUrl,
+            colliderMeshUrl,
+            worldId,
+            orchestration,
+            thumbnailBase64,
+          });
+          console.log('📚 [SAVE] Scene saved successfully:', scene);
+          onSaveComplete?.();
+          onClose();
+          return;
+        }
+        throw fetchErr;
+      }
 
-      // Create scene
-      await createScene(token, {
+      const file = new File([blob], `${concept.replace(/[^a-z0-9]/gi, '_')}.spz`, { type: 'application/octet-stream' });
+      console.log('📚 [SAVE] Created file:', file.name, file.size, 'bytes');
+
+      // Create scene (thumbnailBase64 already declared above)
+      console.log('📚 [SAVE] Uploading to server...');
+      console.log('📚 [SAVE] Thumbnail:', thumbnailBase64 ? 'yes' : 'none');
+      const scene = await createScene(token, {
         title: title.trim(),
         description: description.trim() || undefined,
         concept,
         tags: tags.length > 0 ? tags : undefined,
         isPublic,
         splatFile: file,
+        thumbnailBase64,
       });
 
+      console.log('📚 [SAVE] Scene saved successfully:', scene);
       onSaveComplete?.();
       onClose();
     } catch (err) {
-      console.error('Failed to save scene:', err);
-      setError(err instanceof Error ? err.message : 'Failed to save scene');
+      console.error('📚 [SAVE] Failed to save scene:', err);
+      const errMsg = err instanceof Error ? err.message : 'Failed to save scene';
+      
+      // Convert to user-friendly error
+      let friendlyError = errMsg;
+      if (errMsg.toLowerCase().includes('bucket') || errMsg.toLowerCase().includes('nosuchbucket')) {
+        friendlyError = 'Storage not configured. Please contact support.';
+      } else if (errMsg.toLowerCase().includes('unauthorized') || errMsg.toLowerCase().includes('auth')) {
+        friendlyError = 'Session expired. Please sign out and sign in again.';
+      } else if (errMsg.toLowerCase().includes('network') || errMsg.toLowerCase().includes('fetch')) {
+        friendlyError = 'Connection error. Check your internet and try again.';
+      } else if (errMsg.toLowerCase().includes('timeout')) {
+        friendlyError = 'Upload timed out. Please try again.';
+      } else if (errMsg.toLowerCase().includes('size') || errMsg.toLowerCase().includes('large')) {
+        friendlyError = 'File too large to upload. Please try a smaller scene.';
+      } else if (errMsg === 'UnknownError' || errMsg === 'Unknown error') {
+        friendlyError = 'Something went wrong. Please try again or contact support.';
+      }
+      
+      setError(friendlyError);
     } finally {
       setSaving(false);
     }

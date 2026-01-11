@@ -1,64 +1,51 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export async function generateImageWithGemini(concept: string): Promise<string> {
-  if (!GEMINI_API_KEY) {
-    throw new Error('VITE_GEMINI_API_KEY not found. Please add it to your .env file.');
-  }
-
   try {
     console.log('🎨 [GEMINI] Generating image for concept:', concept);
 
-    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    
-    let model;
-    try {
-      model = await genAI.getGenerativeModel({ model: 'gemini-2.5-flash-image-preview' });
-      console.log('✅ [GEMINI] Using gemini-2.5-flash-image-preview');
-    } catch (e: any) {
-      console.warn('⚠️ [GEMINI] gemini-2.5-flash-image-preview not available, trying alternatives...');
-      
-      const fallbackModels = ['gemini-2.0-flash-exp', 'gemini-pro-vision'];
-      for (const modelName of fallbackModels) {
-        try {
-          model = await genAI.getGenerativeModel({ model: modelName });
-          console.log(`✅ [GEMINI] Using fallback model: ${modelName}`);
-          break;
-        } catch (e2: any) {
-          console.warn(`⚠️ [GEMINI] ${modelName} not available: ${e2.message}`);
-        }
-      }
-      
-      if (!model) {
-        throw new Error('No available Gemini image generation model');
-      }
-    }
-
-    const imagePrompt = `Generate a high-quality, detailed image of: ${concept}. The image should be suitable for conversion to a 3D Gaussian Splat environment.`;
+    const imagePrompt = `Generate a high-quality, detailed image of: ${concept}. The image should be suitable for conversion to a 3D Gaussian Splat environment. Describe a vivid, photorealistic scene.`;
     
     console.log('📝 [GEMINI] Image prompt:', imagePrompt);
 
-    const result = await model.generateContent(imagePrompt);
-    const response = await result.response;
-    
+    // Use backend proxy to avoid CORS
+    const response = await fetch(`${API_URL}/api/gemini/generate-image`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: imagePrompt })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `API error: ${response.status}`);
+    }
+
+    const data = await response.json();
     console.log('📦 [GEMINI] Response received');
 
     let imageUrl = '';
-    const text = response.text();
     
-    if (response.candidates?.[0]?.content?.parts) {
-      for (const part of response.candidates[0].content.parts) {
-        const partAny = part as any;
-        if (typeof partAny.imageUrl === 'string') {
-          imageUrl = partAny.imageUrl;
+    // Try to extract image URL from response
+    if (data.candidates?.[0]?.content?.parts) {
+      for (const part of data.candidates[0].content.parts) {
+        if (typeof part.imageUrl === 'string') {
+          imageUrl = part.imageUrl;
           console.log('✅ [GEMINI] Image URL received:', imageUrl);
+          break;
+        }
+        // Check for inline data (base64 image)
+        if (part.inlineData?.mimeType?.startsWith('image/')) {
+          const base64 = part.inlineData.data;
+          imageUrl = `data:${part.inlineData.mimeType};base64,${base64}`;
+          console.log('✅ [GEMINI] Base64 image received');
           break;
         }
       }
     }
-    
-    if (!imageUrl && text) {
+
+    // Try to extract URL from text response
+    if (!imageUrl && data.candidates?.[0]?.content?.parts?.[0]?.text) {
+      const text = data.candidates[0].content.parts[0].text;
       const urlMatch = text.match(/https?:\/\/[^\s]+\.(jpg|jpeg|png|webp)/i);
       if (urlMatch) {
         imageUrl = urlMatch[0];
@@ -67,7 +54,10 @@ export async function generateImageWithGemini(concept: string): Promise<string> 
     }
 
     if (!imageUrl) {
-      throw new Error('No image URL found in Gemini response');
+      // Gemini text models don't generate images directly
+      // Return a placeholder or use the text description for Marble
+      console.warn('⚠️ [GEMINI] No image URL in response - Gemini returned text description');
+      throw new Error('Gemini did not return an image. The model may not support image generation.');
     }
 
     return imageUrl;

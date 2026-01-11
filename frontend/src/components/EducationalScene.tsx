@@ -1,270 +1,327 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { FirstPersonScene } from './FirstPersonScene';
+import { FirstPersonScene, type FirstPersonSceneHandle } from './FirstPersonScene';
 import { SubtitleOverlay } from './SubtitleOverlay';
 import { EducationOverlay } from './EducationOverlay';
 import { SaveToLibraryModal } from './SaveToLibraryModal';
+import { GenerationLoadingScreen } from './GenerationLoadingScreen';
+import { NarrationOverlay } from './NarrationOverlay';
+import { usePipelineSocket } from '../hooks/usePipelineSocket';
 import { orchestrateConcept, type GeminiOrchestrationResponse } from '../lib/orchestrateConcept';
-import { generateImageWithGemini } from '../lib/generateImage';
-import { convertImageToSplat } from '../lib/generateSplat';
 import { findSceneByConcept } from '../lib/sceneRegistry';
+import { getProxiedSplatUrl, type OrchestrationData } from '../lib/api';
 
 type SceneMode = 'idle' | 'listening' | 'processing' | 'loading_scene' | 'in_scene';
 
 interface EducationalSceneProps {
   concept: string;
+  savedSplatUrl?: string | null;
+  savedOrchestration?: OrchestrationData | null;
+  customImageData?: string | null;
   onExit?: () => void;
 }
 
-export function EducationalScene({ concept, onExit }: EducationalSceneProps) {
+export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, customImageData, onExit }: EducationalSceneProps) {
   const [mode, setMode] = useState<SceneMode>('processing');
   const [orchestration, setOrchestration] = useState<GeminiOrchestrationResponse | null>(null);
   const [splatUrl, setSplatUrl] = useState<string>('');
+  const [colliderMeshUrl, setColliderMeshUrl] = useState<string | undefined>(undefined);
+  const [worldId, setWorldId] = useState<string | undefined>(undefined);
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
-  const [pipelineStep, setPipelineStep] = useState<string>('Initializing...');
-  const [error, setError] = useState<string | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [showSaveModal, setShowSaveModal] = useState(false);
+  const [thumbnailDataUrl, setThumbnailDataUrl] = useState<string | null>(null);
+  const useNewLoadingScreen = true;
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const sceneRef = useRef<FirstPersonSceneHandle | null>(null);
 
-  // Step 1: Full pipeline - Orchestrate → Generate Image → Convert to Splat → Load Scene
+  // Callback for NarrationOverlay to get screenshot
+  const getScreenshot = useCallback(() => {
+    return sceneRef.current?.captureScreenshot() || null;
+  }, []);
+
+  // Get quality mode from sessionStorage
+  const qualityMode = sessionStorage.getItem('qualityMode') || 'standard';
+
+  // Pipeline socket for real-time updates
+  const pipeline = usePipelineSocket();
+
+  // Start pipeline when component mounts
   useEffect(() => {
     let cancelled = false;
 
-    async function generateAndLoadScene() {
+    async function runPipeline() {
       try {
         setMode('processing');
-        console.log('🚀 [PIPELINE] Starting full pipeline for concept:', concept);
-        console.log('💰 [COST] Pipeline: Deepgram → Gemini Image → Marble → SparkJS');
-        
-        // Step 1a: Orchestrate with Gemini (get educational content)
-        setPipelineStep('Generating educational content with Gemini...');
-        console.log('📚 [PIPELINE] Step 1/4: Orchestrating educational content...');
-        const result = await orchestrateConcept(concept);
-        
-        if (cancelled) return;
-        setOrchestration(result);
-        console.log('✅ [PIPELINE] Step 1/4 complete: Educational content generated');
-        
-        // Step 1b: Check if splat exists in LOCAL library first (FREE - no API cost)
-        // Only check LOCAL files (/scenes/), not external demo URLs
-        console.log('🔍 [PIPELINE] Step 2/4: Checking LOCAL library for existing splat...');
-        const scene = findSceneByConcept(concept);
-        if (scene && scene.splatLowUrl) {
-          // Only use library if it's a LOCAL file (starts with /scenes/)
-          // External URLs (like demo scenes) should NOT skip generation
-          const isLocalFile = scene.splatLowUrl.startsWith('/scenes/');
+        console.log('🚀 [PIPELINE] Starting pipeline for concept:', concept);
+
+        // Check for SAVED splat from library (already generated)
+        if (savedSplatUrl) {
+          // Use proxy to bypass CORS for Vultr URLs
+          const proxiedUrl = getProxiedSplatUrl(savedSplatUrl);
+          console.log('✅ [PIPELINE] Using SAVED splat from library:', savedSplatUrl);
+          console.log('✅ [PIPELINE] Proxied URL:', proxiedUrl);
+          setSplatUrl(proxiedUrl);
+          setMode('loading_scene');
           
-          if (isLocalFile) {
-            // Check if the LOCAL splat file exists and is valid
-            try {
-              const checkResponse = await fetch(scene.splatLowUrl, { method: 'HEAD' });
-              if (checkResponse.ok) {
-                const contentType = checkResponse.headers.get('content-type');
-                const contentLength = checkResponse.headers.get('content-length');
-                console.log('✅ [PIPELINE] Found LOCAL splat in library (FREE):', scene.splatLowUrl);
-                console.log('📦 [PIPELINE] File size:', contentLength, 'bytes, type:', contentType);
-                
-                // Verify it's not empty
-                if (contentLength && parseInt(contentLength) < 100) {
-                  console.warn('⚠️ [PIPELINE] File seems too small, may be invalid');
-                  throw new Error('File too small');
-                }
-                
-                console.log('💰 [COST] Skipping API calls - using LOCAL library splat');
-                setSplatUrl(scene.splatLowUrl);
-                setMode('loading_scene');
-                return;
-              }
-            } catch (e: any) {
-              console.log('⚠️ [PIPELINE] LOCAL splat not found in library or invalid:', e.message);
-              console.log('💰 [COST] Will use Gemini Image + Marble APIs (costs money)');
-            }
+          // Use saved orchestration if available, otherwise generate
+          if (savedOrchestration) {
+            console.log('✅ [PIPELINE] Using saved orchestration');
+            setOrchestration({
+              concept,
+              learningObjectives: savedOrchestration.learningObjectives,
+              keyFacts: savedOrchestration.keyFacts,
+              narrationScript: savedOrchestration.narrationScript,
+              subtitleLines: savedOrchestration.subtitleLines,
+              callouts: savedOrchestration.callouts,
+              sources: savedOrchestration.sources,
+            });
           } else {
-            // External URL (demo scene) - don't use as library, generate new one
-            console.log('⚠️ [PIPELINE] Scene has external URL (demo/fallback), not using as library');
-            console.log('💰 [COST] Will generate new splat via Gemini Image + Marble APIs (costs money)');
+            // Generate orchestration in background
+            try {
+              const orchestrationResponse = await orchestrateConcept(concept);
+              if (!cancelled) {
+                setOrchestration(orchestrationResponse);
+              }
+            } catch (err) {
+              console.warn('⚠️ [PIPELINE] Orchestration failed, continuing without:', err);
+            }
+          }
+          return;
+        }
+
+        // Check for existing local scene (FREE)
+        const existingScene = findSceneByConcept(concept);
+        if (existingScene) {
+          console.log('✅ [PIPELINE] Found existing LOCAL scene:', existingScene);
+          setSplatUrl(existingScene.splatUrl);
+          setMode('loading_scene');
+          
+          // Generate orchestration in background
+          try {
+            const orchestrationResponse = await orchestrateConcept(concept);
+            if (!cancelled) {
+              setOrchestration(orchestrationResponse);
+            }
+          } catch (err) {
+            console.warn('⚠️ [PIPELINE] Orchestration failed, continuing without:', err);
+          }
+          return;
+        }
+
+        // No existing scene - use the full pipeline with WebSocket updates
+        console.log('🔄 [PIPELINE] Starting full generation pipeline...');
+        
+        // Convert custom image data URL to File if provided
+        let imageFile: File | undefined;
+        if (customImageData) {
+          try {
+            const response = await fetch(customImageData);
+            const blob = await response.blob();
+            imageFile = new File([blob], 'custom-image.png', { type: blob.type });
+            console.log('📸 [PIPELINE] Using custom uploaded image');
+          } catch (err) {
+            console.warn('⚠️ [PIPELINE] Failed to process custom image:', err);
           }
         }
         
-        // Step 1c: Generate image with Gemini (COSTS MONEY)
-        setPipelineStep('Creating image with Gemini...');
-        console.log('🎨 [PIPELINE] Step 2/4: Generating image with Gemini...');
-        console.log('💰 [COST] Gemini image generation API call - this will charge your account');
-        const imageUrl = await generateImageWithGemini(concept);
-        
-        if (cancelled) return;
-        console.log('✅ [PIPELINE] Step 2/4 complete: Image generated:', imageUrl);
-        
-        // Step 1d: Convert image to Gaussian Splat with Marble (COSTS MONEY)
-        setPipelineStep('Converting to 3D Gaussian Splat with Marble...');
-        console.log('🔄 [PIPELINE] Step 3/4: Converting image to 3D Gaussian Splat with Marble...');
-        console.log('💰 [COST] Marble API call - this will charge your account');
-        console.log('⏳ [PIPELINE] World generation takes ~5 minutes - please wait...');
-        const splatUrl = await convertImageToSplat(imageUrl, concept);
-        
-        if (cancelled) return;
-        console.log('✅ [PIPELINE] Step 3/4 complete: Splat generated:', splatUrl);
-        
-        // Step 1e: Load scene with SparkJS (FREE - client-side rendering)
-        console.log('🎮 [PIPELINE] Step 4/4: Loading scene with SparkJS...');
-        setSplatUrl(splatUrl);
-        setMode('loading_scene');
-        console.log('✅ [PIPELINE] All steps complete! Scene loading...');
-        console.log('💰 [COST] Total API costs: Gemini Image + Marble (check your account)');
-      } catch (error: any) {
-        console.error('Pipeline error:', error);
+        // Start the pipeline via WebSocket
+        await pipeline.startPipeline(concept, imageFile, qualityMode);
+
+      } catch (err) {
+        console.error('❌ [PIPELINE] Error:', err);
         if (!cancelled) {
-          setError(error?.message || 'Failed to load scene');
-          // Fallback: Use pre-existing scene from registry
-          const scene = findSceneByConcept(concept);
-          if (scene && scene.splatLowUrl) {
-            console.log('🔄 Falling back to registry scene:', scene.splatLowUrl);
-            setSplatUrl(scene.splatLowUrl);
-            setMode('loading_scene');
-          } else {
-            // Ultimate fallback: butterfly demo scene
-            console.log('🔄 Using fallback demo scene');
-            setSplatUrl('https://sparkjs.dev/assets/splats/butterfly.spz');
-            setMode('loading_scene');
-          }
-          // Still try to get orchestration for educational content
-          try {
-            const result = await orchestrateConcept(concept);
-            if (!cancelled) {
-              setOrchestration(result);
-            }
-          } catch (orchError) {
-            console.error('Orchestration fallback error:', orchError);
-          }
+          setMode('processing'); // Stay in processing to show error
         }
       }
     }
 
-    generateAndLoadScene();
+    runPipeline();
 
     return () => {
       cancelled = true;
     };
-  }, [concept]);
+  }, [concept, savedSplatUrl, savedOrchestration, customImageData, qualityMode]);
 
-  // Step 2: Generate and play narration (ElevenLabs)
+  // Watch for pipeline completion
   useEffect(() => {
-    if (!orchestration || mode !== 'loading_scene') return;
-
-    async function generateAndPlayNarration() {
-      try {
-        // NOTE: ElevenLabs integration needs API key
-        // For now, we'll use Web Speech API as fallback
-        // When ElevenLabs is available, replace with:
-        // const audioUrl = await generateElevenLabsAudio(orchestration.narrationScript);
-        // audioRef.current = new Audio(audioUrl);
-        
-        // Fallback: Use Web Speech API
-        if (!orchestration) return;
-        const utterance = new SpeechSynthesisUtterance(orchestration.narrationScript);
-        utterance.rate = 0.9;
-        utterance.pitch = 1;
-        utterance.volume = 1;
-        
-        // Track audio time for subtitles
-        const startTime = Date.now();
-        const updateTime = () => {
-          if (speechSynthesis.speaking) {
-            const elapsed = (Date.now() - startTime) / 1000;
-            setAudioCurrentTime(elapsed);
-            requestAnimationFrame(updateTime);
-          } else {
-            setIsAudioPlaying(false);
-          }
-        };
-
-        utterance.onstart = () => {
-          setIsAudioPlaying(true);
-          setMode('in_scene');
-          updateTime();
-        };
-
-        utterance.onend = () => {
-          setIsAudioPlaying(false);
-        };
-
-        speechSynthesis.speak(utterance);
-      } catch (error) {
-        console.error('Narration error:', error);
-        setMode('in_scene');
+    if (pipeline.stage === 'complete' && pipeline.splatUrl) {
+      console.log('✅ [PIPELINE] Pipeline complete, splat URL:', pipeline.splatUrl);
+      setSplatUrl(pipeline.splatUrl);
+      
+      // Store collider and world info
+      if (pipeline.colliderMeshUrl) {
+        setColliderMeshUrl(pipeline.colliderMeshUrl);
+      }
+      if (pipeline.worldId) {
+        setWorldId(pipeline.worldId);
+      }
+      
+      setMode('loading_scene');
+      
+      // Generate orchestration if not already done
+      if (!orchestration) {
+        orchestrateConcept(concept)
+          .then(result => setOrchestration(result))
+          .catch(err => console.warn('⚠️ Orchestration failed:', err));
       }
     }
+  }, [pipeline.stage, pipeline.splatUrl, pipeline.colliderMeshUrl, pipeline.worldId, concept, orchestration]);
 
-    generateAndPlayNarration();
+  // Handle scene ready
+  const handleSceneReady = useCallback(() => {
+    console.log('✅ [SCENE] 3D scene ready');
+    setMode('in_scene');
+  }, []);
 
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-      speechSynthesis.cancel();
-    };
-  }, [orchestration, mode]);
+  // Handle screenshot captured
+  const handleScreenshotCaptured = useCallback((dataUrl: string) => {
+    console.log('📸 [SCREENSHOT] Captured for thumbnail');
+    setThumbnailDataUrl(dataUrl);
+  }, []);
 
-  const handleSceneReady = () => {
-    // Scene is loaded, ready for narration
-  };
+  // Handle loading complete from GenerationLoadingScreen
+  const handleLoadingComplete = useCallback((completedSplatUrl: string) => {
+    console.log('✅ [LOADING] Complete, transitioning to scene');
+    setSplatUrl(completedSplatUrl);
+    setMode('loading_scene');
+  }, []);
 
+  // Handle retry
+  const handleRetry = useCallback(() => {
+    console.log('🔄 [PIPELINE] Retrying...');
+    pipeline.startPipeline(concept, undefined, qualityMode);
+  }, [concept, qualityMode, pipeline]);
+
+  // Show new loading screen during processing
+  if (mode === 'processing' && useNewLoadingScreen) {
+    return (
+      <GenerationLoadingScreen
+        stage={pipeline.stage}
+        progress={pipeline.progress}
+        message={pipeline.message}
+        concept={concept}
+        splatUrl={pipeline.splatUrl}
+        generatedImage={pipeline.generatedImage}
+        generatedImageMime={pipeline.generatedImageMime}
+        error={pipeline.error}
+        onComplete={handleLoadingComplete}
+        onRetry={handleRetry}
+        onExit={onExit}
+      />
+    );
+  }
+
+  // Old loading screen fallback
   if (mode === 'processing') {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          className="text-center max-w-md"
-        >
-          <p className="font-mono text-white text-glow mb-4 text-xl">
-            Processing "{concept}"...
-          </p>
-          <p className="font-mono text-sm text-white/60 mb-2">
-            {pipelineStep}
-          </p>
-          {error && (
-            <p className="text-red-400 text-xs font-mono mt-2 max-w-md text-center">
-              Error: {error}
-            </p>
-          )}
-          <div className="flex items-center justify-center gap-2 mt-4">
-            <div className="w-2 h-2 bg-white/60 rounded-full animate-pulse" />
-            <div className="w-2 h-2 bg-white/60 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }} />
-            <div className="w-2 h-2 bg-white/60 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }} />
+        <div className="text-center">
+          <div className="mb-6">
+            <div className="w-16 h-16 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mx-auto" />
           </div>
-          <p className="font-mono text-xs text-white/40 mt-6">
-            Pipeline: Deepgram → Gemini Image → Marble → SparkJS
+          <p className="font-mono text-white/80 text-lg mb-2">
+            {pipeline.message || 'Generating your world...'}
           </p>
-        </motion.div>
+          <p className="font-mono text-white/40 text-sm">
+            {pipeline.progress}% complete
+          </p>
+        </div>
       </div>
     );
   }
 
-  if (mode === 'loading_scene') {
+  // For saved scenes, render directly without waiting for orchestration
+  if (mode === 'loading_scene' && splatUrl) {
+    // Render the scene immediately - orchestration will load in background
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-center"
-        >
-          <p className="font-mono text-white text-glow mb-4">
-            Loading 3D environment...
-          </p>
-        </motion.div>
+      <div className="fixed inset-0 z-50">
+        <FirstPersonScene
+          ref={sceneRef}
+          splatUrl={splatUrl}
+          colliderMeshUrl={colliderMeshUrl}
+          onSceneReady={handleSceneReady}
+          onScreenshotCaptured={handleScreenshotCaptured}
+        />
+
+        {/* Voice Q&A Narration */}
+        <NarrationOverlay
+          getScreenshot={getScreenshot}
+          concept={concept}
+          enabled={true}
+        />
+
+        {/* Show minimal UI while orchestration loads */}
+        {orchestration && (
+          <>
+            <SubtitleOverlay
+              subtitleLines={orchestration.subtitleLines}
+              audioCurrentTime={audioCurrentTime}
+              isPlaying={isAudioPlaying}
+            />
+            <EducationOverlay
+              concept={orchestration.concept}
+              learningObjectives={orchestration.learningObjectives}
+              keyFacts={orchestration.keyFacts}
+              callouts={orchestration.callouts}
+              sources={orchestration.sources}
+            />
+          </>
+        )}
+
+        <div className="absolute top-6 right-6 flex gap-2 z-50">
+          <motion.button
+            onClick={() => setShowSaveModal(true)}
+            className="glass px-4 py-2 rounded-full font-mono text-sm text-white hover:bg-white/30 transition-colors"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+          >
+            save to library
+          </motion.button>
+          {onExit && (
+            <motion.button
+              onClick={onExit}
+              className="glass px-4 py-2 rounded-full font-mono text-sm text-white hover:bg-white/30 transition-colors"
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+            >
+              exit
+            </motion.button>
+          )}
+        </div>
+
+        <SaveToLibraryModal
+          isOpen={showSaveModal}
+          onClose={() => setShowSaveModal(false)}
+          concept={concept}
+          splatUrl={splatUrl}
+          colliderMeshUrl={colliderMeshUrl}
+          worldId={worldId}
+          thumbnailDataUrl={thumbnailDataUrl}
+          orchestration={orchestration ? {
+            learningObjectives: orchestration.learningObjectives,
+            keyFacts: orchestration.keyFacts,
+            narrationScript: orchestration.narrationScript,
+            subtitleLines: orchestration.subtitleLines,
+            callouts: orchestration.callouts,
+            sources: orchestration.sources,
+          } : null}
+          onSaveComplete={() => {
+            setShowSaveModal(false);
+          }}
+        />
       </div>
     );
   }
 
+  // Waiting for orchestration
   if (!orchestration || !splatUrl) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
         <p className="font-mono text-white text-glow">
-          Error loading scene
+          {!splatUrl ? 'Loading 3D environment...' : 'Preparing educational content...'}
         </p>
       </div>
     );
@@ -272,11 +329,21 @@ export function EducationalScene({ concept, onExit }: EducationalSceneProps) {
 
   return (
     <div className="fixed inset-0 z-50">
-      <FirstPersonScene 
-        splatUrl={splatUrl} 
+      <FirstPersonScene
+        ref={sceneRef}
+        splatUrl={splatUrl}
+        colliderMeshUrl={colliderMeshUrl}
         onSceneReady={handleSceneReady}
+        onScreenshotCaptured={handleScreenshotCaptured}
       />
-      
+
+      {/* Voice Q&A Narration */}
+      <NarrationOverlay
+        getScreenshot={getScreenshot}
+        concept={concept}
+        enabled={true}
+      />
+
       <SubtitleOverlay
         subtitleLines={orchestration.subtitleLines}
         audioCurrentTime={audioCurrentTime}
@@ -314,15 +381,24 @@ export function EducationalScene({ concept, onExit }: EducationalSceneProps) {
         )}
       </div>
 
-      {/* Save to Library Modal */}
       <SaveToLibraryModal
         isOpen={showSaveModal}
         onClose={() => setShowSaveModal(false)}
         concept={concept}
         splatUrl={splatUrl}
+        colliderMeshUrl={colliderMeshUrl}
+        worldId={worldId}
+        thumbnailDataUrl={thumbnailDataUrl}
+        orchestration={orchestration ? {
+          learningObjectives: orchestration.learningObjectives,
+          keyFacts: orchestration.keyFacts,
+          narrationScript: orchestration.narrationScript,
+          subtitleLines: orchestration.subtitleLines,
+          callouts: orchestration.callouts,
+          sources: orchestration.sources,
+        } : null}
         onSaveComplete={() => {
           setShowSaveModal(false);
-          // Optionally show a success message or navigate to library
         }}
       />
     </div>
