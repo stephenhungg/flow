@@ -5,10 +5,7 @@
  * Documentation: Check @theworldlabs documentation for API details
  */
 
-const MARBLE_API_KEY = import.meta.env.VITE_MARBLE_API_KEY ;
-// Use local proxy server to avoid CORS issues
-// If proxy not running, falls back to direct API (will fail with CORS)
-const MARBLE_API_URL = import.meta.env.VITE_MARBLE_PROXY_URL || 'http://localhost:3001/api/marble/convert';
+const MARBLE_API_KEY = import.meta.env.VITE_MARBLE_API_KEY;
 
 
 // Note: Check @theworldlabs documentation for exact API endpoint and format
@@ -149,15 +146,4 @@ export async function convertImageToSplat(imageUrlOrData: string, concept?: stri
     console.error('💰 [COST] Marble API call failed - check if you were charged');
     throw error;
   }
-}
-
-
-function base64ToBlob(base64: string, mimeType: string): Blob {
-  const byteCharacters = atob(base64);
-  const byteNumbers = new Array(byteCharacters.length);
-  for (let i = 0; i < byteCharacters.length; i++) {
-    byteNumbers[i] = byteCharacters.charCodeAt(i);
-  }
-  const byteArray = new Uint8Array(byteNumbers);
-  return new Blob([byteArray], { type: mimeType });
 }

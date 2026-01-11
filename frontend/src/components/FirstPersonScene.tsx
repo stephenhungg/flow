@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { SplatMesh } from '@sparkjsdev/spark';
-import { useFirstPersonControls } from '../hooks/useFirstPersonControls';
 
 interface FirstPersonSceneProps {
   splatUrl: string;
@@ -15,11 +14,6 @@ export function FirstPersonScene({ splatUrl, onSceneReady }: FirstPersonScenePro
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const splatObjectRef = useRef<THREE.Object3D | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [cameraReady, setCameraReady] = useState(false);
-  const [cameraState, setCameraState] = useState<THREE.PerspectiveCamera | null>(null);
-
-  // Initialize controls - will be enabled once camera is ready
-  // const controls = useFirstPersonControls(cameraState, cameraReady);
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -39,8 +33,6 @@ export function FirstPersonScene({ splatUrl, onSceneReady }: FirstPersonScenePro
     const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
     camera.position.set(0, 1.7, 0);
     cameraRef.current = camera;
-    setCameraState(camera); // Set camera state so controls hook can use it
-    setCameraReady(true); // Enable controls now that camera exists
 
     // Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -174,8 +166,6 @@ export function FirstPersonScene({ splatUrl, onSceneReady }: FirstPersonScenePro
       if (document.pointerLockElement === renderer.domElement) {
         document.exitPointerLock();
       }
-      setCameraReady(false);
-      setCameraState(null);
     };
   }, [splatUrl, onSceneReady]);
 
