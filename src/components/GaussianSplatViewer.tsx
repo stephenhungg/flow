@@ -16,16 +16,21 @@ export const GaussianSplatViewer = ({ splatUrl, onLoaded }: GaussianSplatViewerP
   // Movement state
   const keysPressed = useRef<Set<string>>(new Set());
   const velocity = useRef(new THREE.Vector3());
-  const moveSpeed = 0.1;
+  const moveSpeed = 0.15;
+  const animationFrameRef = useRef<number>();
 
   useEffect(() => {
     if (!containerRef.current) return;
 
     const container = containerRef.current;
+    let viewer: Viewer | null = null;
 
-    // Initialize viewer
-    const viewer = new Viewer({
+    console.log('Initializing viewer with splat:', splatUrl);
+
+    // Initialize viewer with simpler config
+    viewer = new Viewer({
       selfDrivenMode: false,
+      rootElement: container,
       renderer: {
         antialias: true,
         alpha: false,
@@ -34,50 +39,46 @@ export const GaussianSplatViewer = ({ splatUrl, onLoaded }: GaussianSplatViewerP
         fov: 75,
         near: 0.1,
         far: 1000,
-        position: [0, 1.6, 5], // Eye-level height, back a bit
+        position: [0, 0, 5], // Back from origin
       },
       controls: {
         enabled: true,
         enableRotate: true,
-        enablePan: false,
-        enableZoom: false,
-        rotateSpeed: 0.5,
-        mouseRotateSpeed: 0.003,
-        pointerLockMode: true, // FPS-style mouse look
+        enablePan: true,
+        enableZoom: true,
       },
-      useBuiltInControls: false, // We'll handle movement manually
+      useBuiltInControls: true, // Use built-in controls for now
     });
 
     viewerRef.current = viewer;
 
-    // Add to DOM
+    // Initialize viewer
     viewer.init().then(() => {
-      if (container.firstChild) {
-        container.removeChild(container.firstChild);
-      }
-      container.appendChild(viewer.rootElement);
+      console.log('Viewer initialized');
 
       // Load the splat scene
-      viewer
+      return viewer!
         .addSplatScene(splatUrl, {
           progressiveLoad: true,
-          rotation: [0, 0, 0, 1], // Quaternion
-          position: [0, 0, 0],
-          scale: [1, 1, 1],
         })
         .then(() => {
+          console.log('Splat scene loaded successfully');
           setIsLoading(false);
-          viewer.start();
+          viewer!.start();
           if (onLoaded) onLoaded();
         })
         .catch((err: Error) => {
-          console.error('Error loading splat:', err);
-          setError('Failed to load 3D scene');
+          console.error('Error loading splat scene:', err);
+          setError(`Failed to load 3D scene: ${err.message}`);
           setIsLoading(false);
         });
+    }).catch((err: Error) => {
+      console.error('Error initializing viewer:', err);
+      setError(`Failed to initialize viewer: ${err.message}`);
+      setIsLoading(false);
     });
 
-    // Keyboard controls
+    // Keyboard controls for WASD movement
     const handleKeyDown = (e: KeyboardEvent) => {
       keysPressed.current.add(e.key.toLowerCase());
     };
@@ -91,7 +92,10 @@ export const GaussianSplatViewer = ({ splatUrl, onLoaded }: GaussianSplatViewerP
 
     // Animation loop for WASD movement
     const animate = () => {
-      if (!viewer || !viewer.camera) return;
+      if (!viewer || !viewer.camera) {
+        animationFrameRef.current = requestAnimationFrame(animate);
+        return;
+      }
 
       const camera = viewer.camera;
       velocity.current.set(0, 0, 0);
@@ -136,27 +140,33 @@ export const GaussianSplatViewer = ({ splatUrl, onLoaded }: GaussianSplatViewerP
       viewer.update();
       viewer.render();
 
-      requestAnimationFrame(animate);
+      animationFrameRef.current = requestAnimationFrame(animate);
     };
 
     animate();
 
     // Handle window resize
     const handleResize = () => {
-      if (viewer) {
+      if (viewer && container) {
         const rect = container.getBoundingClientRect();
         viewer.setRenderDimensions(rect.width, rect.height);
       }
     };
 
     window.addEventListener('resize', handleResize);
-    handleResize();
+
+    // Initial size
+    setTimeout(handleResize, 100);
 
     // Cleanup
     return () => {
+      console.log('Cleaning up viewer');
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('resize', handleResize);
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
       if (viewer) {
         viewer.dispose();
       }
@@ -164,38 +174,41 @@ export const GaussianSplatViewer = ({ splatUrl, onLoaded }: GaussianSplatViewerP
   }, [splatUrl, onLoaded]);
 
   return (
-    <div className="relative w-full h-screen">
+    <div className="relative w-full h-screen bg-black">
       <div ref={containerRef} className="w-full h-full" />
 
       {/* Loading overlay */}
       {isLoading && (
-        <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
           <div className="text-center">
             <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
             <p className="text-white text-lg">Loading 3D scene...</p>
+            <p className="text-white text-sm mt-2 opacity-60">This may take a moment</p>
           </div>
         </div>
       )}
 
       {/* Error overlay */}
       {error && (
-        <div className="absolute inset-0 bg-black bg-opacity-90 flex items-center justify-center">
-          <div className="text-center text-white">
+        <div className="absolute inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50">
+          <div className="text-center text-white max-w-md px-4">
             <p className="text-xl mb-4">❌ {error}</p>
             <p className="text-sm text-gray-400">Check console for details</p>
+            <p className="text-xs text-gray-500 mt-4">File: {splatUrl}</p>
           </div>
         </div>
       )}
 
       {/* Controls hint */}
       {!isLoading && !error && (
-        <div className="absolute bottom-8 left-8 bg-black bg-opacity-60 backdrop-blur-sm px-6 py-4 rounded-lg">
-          <p className="text-white text-sm font-mono mb-2">Controls:</p>
+        <div className="absolute bottom-8 left-8 bg-black bg-opacity-70 backdrop-blur-sm px-6 py-4 rounded-lg z-10">
+          <p className="text-white text-sm font-mono mb-2 font-bold">Controls:</p>
           <ul className="text-white text-xs font-mono space-y-1">
             <li>WASD - Move</li>
-            <li>Mouse - Look around</li>
+            <li>Mouse Drag - Look around</li>
             <li>Space - Up</li>
             <li>Shift - Down</li>
+            <li>Scroll - Zoom</li>
           </ul>
         </div>
       )}
