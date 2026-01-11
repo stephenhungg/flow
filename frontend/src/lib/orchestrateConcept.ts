@@ -1,5 +1,3 @@
-import { findSceneByConcept } from './sceneRegistry';
-
 export type KeyFact = {
   text: string;
   source: string;
@@ -36,9 +34,6 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 export async function orchestrateConcept(
   transcript: string
 ): Promise<GeminiOrchestrationResponse> {
-  // Find matching scene
-  const scene = findSceneByConcept(transcript);
-  
   const prompt = `You are an educational content creator for an immersive 3D learning experience. A user has requested to explore: "${transcript}"
 
 Generate educational content including:
@@ -52,7 +47,7 @@ Generate educational content including:
 Return as JSON matching this structure:
 {
   "concept": "${transcript}",
-  "sceneId": "${scene?.id || 'default'}",
+  "sceneId": "default",
   "learningObjectives": ["objective1", "objective2"],
   "keyFacts": [{"text": "fact", "source": "source"}],
   "callouts": [{"text": "callout", "anchor": "center"}],

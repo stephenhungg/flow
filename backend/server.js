@@ -1113,45 +1113,6 @@ app.post('/api/pipeline/start', authMiddleware, upload.single('image'), async (r
       return res.status(400).json({ error: 'Concept is required' });
     }
 
-    // Rate Limiting Logic
-    const userEmail = req.user.email;
-    const userId = req.user.uid;
-
-    if (userEmail !== 'stpnhh@gmail.com') {
-      const usersCollection = getUsersCollection();
-      const user = await usersCollection.findOne({ firebaseUid: userId });
-
-      if (user && user.lastGenerationTime) {
-        const lastGen = new Date(user.lastGenerationTime);
-        const now = new Date();
-        const diffMs = now - lastGen;
-        const hoursSince = diffMs / (1000 * 60 * 60);
-        
-        const limitMs = 12 * 60 * 60 * 1000;
-        if (diffMs < limitMs) {
-          const remainingMs = limitMs - diffMs;
-          const remainingHours = Math.floor(remainingMs / (1000 * 60 * 60));
-          const remainingMinutes = Math.ceil((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
-          
-          let timeString = '';
-          if (remainingHours > 0) timeString += `${remainingHours} hour${remainingHours !== 1 ? 's' : ''}`;
-          if (remainingHours > 0 && remainingMinutes > 0) timeString += ' and ';
-          if (remainingMinutes > 0) timeString += `${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''}`;
-          
-          return res.status(429).json({ 
-            error: `Rate limit exceeded. Next generation available in ${timeString}.` 
-          });
-        }
-      }
-
-      // Update lastGenerationTime
-      await usersCollection.updateOne(
-        { firebaseUid: userId },
-        { $set: { lastGenerationTime: new Date() } },
-        { upsert: true }
-      );
-    }
-
     // Store job info
     pipelineJobs.set(jobId, {
       status: 'started',

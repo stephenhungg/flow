@@ -8,7 +8,6 @@ import { GenerationLoadingScreen } from './GenerationLoadingScreen';
 import { NarrationOverlay } from './NarrationOverlay';
 import { usePipelineSocket } from '../hooks/usePipelineSocket';
 import { orchestrateConcept, type GeminiOrchestrationResponse } from '../lib/orchestrateConcept';
-import { findSceneByConcept } from '../lib/sceneRegistry';
 import { getProxiedSplatUrl, type OrchestrationData } from '../lib/api';
 
 type SceneMode = 'idle' | 'listening' | 'processing' | 'loading_scene' | 'in_scene';
@@ -67,22 +66,27 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
           if (savedOrchestration) {
             console.log('✅ [PIPELINE] Using saved orchestration');
             // Convert API OrchestrationData to GeminiOrchestrationResponse format
+            // Handle both string and object formats from different data sources
             setOrchestration({
               concept,
               sceneId: 'saved',
-              learningObjectives: savedOrchestration.learningObjectives,
-              keyFacts: savedOrchestration.keyFacts.map((fact: string) => ({ text: fact, source: '' })),
+              learningObjectives: savedOrchestration.learningObjectives.map((obj: string | { text: string }) => 
+                typeof obj === 'string' ? obj : obj.text
+              ),
+              keyFacts: savedOrchestration.keyFacts.map((fact: string | { text: string; source?: string }) => 
+                typeof fact === 'string' ? { text: fact, source: '' } : { text: fact.text, source: fact.source || '' }
+              ),
               narrationScript: savedOrchestration.narrationScript,
-              subtitleLines: savedOrchestration.subtitleLines.map((line: { text: string; startTime: number; endTime: number }) => ({ 
-                t: line.startTime, 
+              subtitleLines: savedOrchestration.subtitleLines.map((line: { text: string; startTime?: number; endTime?: number; t?: number }) => ({ 
+                t: line.startTime ?? line.t ?? 0, 
                 text: line.text 
               })),
-              callouts: savedOrchestration.callouts.map((callout: { id: string; text: string; position: { x: number; y: number; z: number } }) => ({
+              callouts: savedOrchestration.callouts.map((callout: { id?: string; text: string; position?: { x: number; y: number; z: number }; anchor?: string }) => ({
                 text: callout.text,
-                anchor: 'center' as const
+                anchor: (callout.anchor || 'center') as 'center' | 'left' | 'right' | 'top' | 'bottom'
               })),
-              sources: savedOrchestration.sources.map((source: { title: string; url: string }) => ({
-                label: source.title,
+              sources: savedOrchestration.sources.map((source: { title?: string; label?: string; url: string }) => ({
+                label: source.title || source.label || 'Source',
                 url: source.url
               })),
             });
@@ -100,27 +104,10 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
           return;
         }
 
-        // Check for existing local scene (FREE)
-        const existingScene = findSceneByConcept(concept);
-        if (existingScene) {
-          console.log('✅ [PIPELINE] Found existing LOCAL scene:', existingScene);
-          setSplatUrl(existingScene.splatLowUrl);
-          setMode('loading_scene');
-          
-          // Generate orchestration in background
-          try {
-            const orchestrationResponse = await orchestrateConcept(concept);
-            if (!cancelled) {
-              setOrchestration(orchestrationResponse);
-            }
-          } catch (err) {
-            console.warn('⚠️ [PIPELINE] Orchestration failed, continuing without:', err);
-          }
-          return;
-        }
-
         // No existing scene - use the full pipeline with WebSocket updates
         console.log('🔄 [PIPELINE] Starting full generation pipeline...');
+        console.log('🔄 [PIPELINE] Quality mode:', qualityMode);
+        console.log('🔄 [PIPELINE] Custom image:', customImageData ? 'yes' : 'no');
         
         // Convert custom image data URL to File if provided
         let imageFile: File | undefined;

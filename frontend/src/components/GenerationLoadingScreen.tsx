@@ -3,10 +3,9 @@
  * WebGL light pillars + contextual AI messages
  */
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { PipelineStage } from '../hooks/usePipelineSocket';
-import LightPillar from './LightPillar';
 
 interface GenerationLoadingScreenProps {
   stage: PipelineStage;
@@ -129,45 +128,8 @@ export function GenerationLoadingScreen({
 
   const stageIndex = ['orchestrating', 'generating_image', 'creating_world', 'loading_splat', 'complete'].indexOf(stage);
 
-  // Single pillar configuration - navy blue gradient
-  const pillarConfig = useMemo(() => {
-    const isActive = stage !== 'idle' && stage !== 'complete';
-    return {
-      topColor: '#1e3a8a', // navy blue
-      bottomColor: '#0f172a', // dark slate
-      intensity: isActive ? 1.0 : 0.6,
-      rotationSpeed: 0.25,
-      glowAmount: 0.006,
-      pillarWidth: 3.5,
-      pillarRotation: 0,
-    };
-  }, [stage]);
-
   return (
-    <div className="fixed inset-0 overflow-hidden" style={{ background: 'linear-gradient(180deg, #020408 0%, #030a14 50%, #041018 100%)' }}>
-      {/* WebGL Light Pillar */}
-      <div className="absolute inset-0">
-        <LightPillar
-          topColor={pillarConfig.topColor}
-          bottomColor={pillarConfig.bottomColor}
-          intensity={pillarConfig.intensity}
-          rotationSpeed={pillarConfig.rotationSpeed}
-          glowAmount={pillarConfig.glowAmount}
-          pillarWidth={pillarConfig.pillarWidth}
-          pillarHeight={0.4}
-          noiseIntensity={0.35}
-          pillarRotation={pillarConfig.pillarRotation}
-          mixBlendMode="normal"
-        />
-      </div>
-
-      {/* Radial vignette */}
-      <div 
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: `radial-gradient(ellipse 80% 60% at 50% 100%, transparent 0%, #030810 70%)`,
-        }}
-      />
+    <div className="fixed inset-0 overflow-hidden bg-black">
 
       {/* Floating particles effect */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
