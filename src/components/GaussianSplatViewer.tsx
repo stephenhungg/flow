@@ -9,7 +9,6 @@ interface GaussianSplatViewerProps {
 
 export const GaussianSplatViewer = ({ splatUrl, onLoaded }: GaussianSplatViewerProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const viewerRef = useRef<Viewer | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,10 +23,9 @@ export const GaussianSplatViewer = ({ splatUrl, onLoaded }: GaussianSplatViewerP
 
     const container = containerRef.current;
     let viewer: Viewer | null = null;
+    let disposed = false;
 
     console.log('Initializing viewer with splat:', splatUrl);
-
-    // Initialize viewer with simpler config
 
     // Create renderer and append to container
     const renderWidth = container.clientWidth || 800;
@@ -43,15 +41,38 @@ export const GaussianSplatViewer = ({ splatUrl, onLoaded }: GaussianSplatViewerP
     const camera = new THREE.PerspectiveCamera(75, renderWidth / renderHeight, 0.1, 1000);
     camera.position.set(0, 0, 5);
     
-    // Initialize viewer with selfDrivenMode: false
+    // Initialize viewer - disable sharedMemory to avoid CORS issues
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     viewer = new Viewer({
       selfDrivenMode: false,
-      renderer: renderer as any,
-      camera: camera as any,
+      renderer: renderer,
+      camera: camera,
       useBuiltInControls: false,
-    });
+      sharedMemoryForWorkers: false,
+      gpuAcceleratedSort: false,
+    } as any);
 
+    // Load the splat scene
+    viewer
+      .addSplatScene(splatUrl, {
+        progressiveLoad: true,
+      })
+      .then(() => {
+        if (disposed) return;
+        console.log('Splat scene loaded successfully');
+        setIsLoading(false);
+        if (onLoaded) onLoaded();
+      })
+      .catch((err: Error) => {
+        if (disposed) return;
+        console.error('Error loading splat scene:', err);
+        setError('Failed to load 3D scene: ' + err.message);
+        setIsLoading(false);
+      });
 
+    // Keyboard controls for WASD movement
+    const handleKeyDown = (e: KeyboardEvent) => {
+      keysPressed.current.add(e.key.toLowerCase());
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -63,18 +84,19 @@ export const GaussianSplatViewer = ({ splatUrl, onLoaded }: GaussianSplatViewerP
 
     // Animation loop for WASD movement
     const animate = () => {
+      if (disposed) return;
       if (!viewer || !viewer.camera) {
         animationFrameRef.current = requestAnimationFrame(animate);
         return;
       }
 
-      const camera = viewer.camera;
+      const cam = viewer.camera;
       velocity.current.set(0, 0, 0);
 
       // Get camera direction vectors
       const forward = new THREE.Vector3();
-      camera.getWorldDirection(forward);
-      forward.y = 0; // Keep movement horizontal
+      cam.getWorldDirection(forward);
+      forward.y = 0;
       forward.normalize();
 
       const right = new THREE.Vector3();
@@ -82,16 +104,16 @@ export const GaussianSplatViewer = ({ splatUrl, onLoaded }: GaussianSplatViewerP
 
       // WASD movement
       if (keysPressed.current.has('w')) {
-        velocity.current.add(forward.multiplyScalar(moveSpeed));
+        velocity.current.add(forward.clone().multiplyScalar(moveSpeed));
       }
       if (keysPressed.current.has('s')) {
-        velocity.current.add(forward.multiplyScalar(-moveSpeed));
+        velocity.current.add(forward.clone().multiplyScalar(-moveSpeed));
       }
       if (keysPressed.current.has('a')) {
-        velocity.current.add(right.multiplyScalar(-moveSpeed));
+        velocity.current.add(right.clone().multiplyScalar(-moveSpeed));
       }
       if (keysPressed.current.has('d')) {
-        velocity.current.add(right.multiplyScalar(moveSpeed));
+        velocity.current.add(right.clone().multiplyScalar(moveSpeed));
       }
 
       // Space/Shift for up/down
@@ -104,7 +126,7 @@ export const GaussianSplatViewer = ({ splatUrl, onLoaded }: GaussianSplatViewerP
 
       // Apply velocity to camera position
       if (velocity.current.length() > 0) {
-        camera.position.add(velocity.current);
+        cam.position.add(velocity.current);
       }
 
       // Update viewer
@@ -116,22 +138,22 @@ export const GaussianSplatViewer = ({ splatUrl, onLoaded }: GaussianSplatViewerP
 
     animate();
 
-    // Handle window resize
+    // Handle window resize - update renderer and camera directly
     const handleResize = () => {
-      if (viewer && container) {
-        const rect = container.getBoundingClientRect();
-        viewer.setRenderDimensions(rect.width, rect.height);
-      }
+      if (disposed || !container) return;
+      const rect = container.getBoundingClientRect();
+      renderer.setSize(rect.width, rect.height);
+      camera.aspect = rect.width / rect.height;
+      camera.updateProjectionMatrix();
     };
 
     window.addEventListener('resize', handleResize);
-
-    // Initial size
     setTimeout(handleResize, 100);
 
     // Cleanup
     return () => {
       console.log('Cleaning up viewer');
+      disposed = true;
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('resize', handleResize);
@@ -140,6 +162,10 @@ export const GaussianSplatViewer = ({ splatUrl, onLoaded }: GaussianSplatViewerP
       }
       if (viewer) {
         viewer.dispose();
+      }
+      renderer.dispose();
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement);
       }
     };
   }, [splatUrl, onLoaded]);
@@ -163,7 +189,7 @@ export const GaussianSplatViewer = ({ splatUrl, onLoaded }: GaussianSplatViewerP
       {error && (
         <div className="absolute inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50">
           <div className="text-center text-white max-w-md px-4">
-            <p className="text-xl mb-4">❌ {error}</p>
+            <p className="text-xl mb-4">Error: {error}</p>
             <p className="text-sm text-gray-400">Check console for details</p>
             <p className="text-xs text-gray-500 mt-4">File: {splatUrl}</p>
           </div>
