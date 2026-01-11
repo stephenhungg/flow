@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, Type, ArrowRight, ChevronDown, Sparkles } from 'lucide-react';
 import { ShaderBackground } from '../components/ShaderBackground';
@@ -6,6 +6,8 @@ import { DecryptedText } from '../components/DecryptedText';
 import { Footer } from '../components/Footer';
 import { TechStack } from '../components/TechStack';
 import { NavBar } from '../components/NavBar';
+import { TypingTagline } from '../components/TypingTagline';
+import { RotatingPlaceholder } from '../components/RotatingPlaceholder';
 
 type InputMode = 'voice' | 'text';
 type QualityMode = 'quick' | 'standard' | 'premium';
@@ -181,15 +183,15 @@ export function LandingPage() {
             <DecryptedText text="flow" speed={80} delay={300} />
           </h1>
           
-          <motion.p
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.5, ease: [0.16, 1, 0.3, 1] }}
-            className="mt-3 text-sm md:text-base text-white/80 max-w-xl mx-auto text-glow"
+            className="mt-3 text-sm md:text-base text-white/80 max-w-xl mx-auto text-glow min-h-[1.5em]"
             style={{ letterSpacing: '0.02em', marginTop: '0.75rem' }}
           >
-            voice-guided 3d exploration.
-          </motion.p>
+            <TypingTagline speed={80} pauseDuration={2000} deleteSpeed={40} />
+          </motion.div>
 
           {/* Mode Toggle */}
           <motion.div
@@ -230,9 +232,9 @@ export function LandingPage() {
           {/* Voice Input */}
           {inputMode === 'voice' && (
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.7, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
               className="mt-12 flex items-center justify-center gap-4"
             >
               <motion.div
@@ -252,18 +254,20 @@ export function LandingPage() {
                 )}
               </motion.div>
 
-              <div className="glass rounded-full px-6 py-3 min-w-[280px] md:min-w-[320px]">
+              <div className="glass rounded-full px-8 py-4 w-[400px] md:w-[480px] h-[3.5rem] flex items-center justify-center">
                 {isListening ? (
-                  <span className="font-mono text-sm text-white/90 text-glow">
+                  <span className="font-mono text-base text-white/90 text-glow truncate w-full text-center px-4">
                     <span className="text-white">{typedText}</span>
                     <motion.span
-                      className="inline-block w-0.5 h-4 bg-white ml-1"
+                      className="inline-block w-0.5 h-5 bg-white ml-1 align-middle"
                       animate={{ opacity: [0, 1, 0] }}
                       transition={{ duration: 0.8, repeat: Infinity }}
                     />
                   </span>
                 ) : (
-                  <span className="font-mono text-sm text-white/60">try saying "show me ancient rome"</span>
+                  <div className="w-full flex items-center justify-center px-4">
+                    <RotatingPlaceholder mode="voice" interval={3000} />
+                  </div>
                 )}
               </div>
             </motion.div>
@@ -272,23 +276,29 @@ export function LandingPage() {
           {/* Text Input */}
           {inputMode === 'text' && (
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.7, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
               className="mt-12"
             >
               <form onSubmit={handleTextSubmit} className="flex items-center justify-center">
-                <div className="glass rounded-full px-6 py-3 min-w-[280px] md:min-w-[400px] flex items-center gap-3 shadow-lg">
-                  <Type className="w-5 h-5 text-white/60 flex-shrink-0" />
-                  <input
-                    type="text"
-                    value={textInput}
-                    onChange={(e) => setTextInput(e.target.value)}
-                    placeholder='type a concept, e.g. "ancient rome"'
-                    className="flex-1 bg-transparent border-none outline-none font-mono text-sm text-white placeholder-white/50 text-glow"
-                    style={{ letterSpacing: '0.02em' }}
-                    autoFocus
-                  />
+                <div className="glass rounded-full px-8 py-4 w-[400px] md:w-[500px] h-[3.5rem] flex items-center gap-4 shadow-lg relative">
+                  <Type className="w-6 h-6 text-white/60 flex-shrink-0" />
+                  <div className="flex-1 relative h-full flex items-center overflow-hidden">
+                    {!textInput && (
+                      <div className="absolute inset-0 flex items-center pointer-events-none">
+                        <RotatingPlaceholder mode="text" interval={3000} className="font-mono text-base" />
+                      </div>
+                    )}
+                    <input
+                      type="text"
+                      value={textInput}
+                      onChange={(e) => setTextInput(e.target.value)}
+                      className="relative w-full h-full bg-transparent border-none outline-none font-mono text-base text-white text-glow placeholder-transparent"
+                      style={{ letterSpacing: '0.02em' }}
+                      autoFocus
+                    />
+                  </div>
                   <motion.button
                     type="submit"
                     disabled={!textInput.trim()}
@@ -300,7 +310,7 @@ export function LandingPage() {
                     whileHover={textInput.trim() ? { scale: 1.1, x: 2 } : {}}
                     whileTap={textInput.trim() ? { scale: 0.95 } : {}}
                   >
-                    <ArrowRight className="w-5 h-5" />
+                    <ArrowRight className="w-6 h-6" />
                   </motion.button>
                 </div>
               </form>

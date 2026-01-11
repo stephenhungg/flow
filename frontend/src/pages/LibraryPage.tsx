@@ -1,16 +1,17 @@
 /**
  * Library page - Browse and manage community scenes
- * Clean, minimal design with centered search
+ * Tilted 3D cards with expandable detail view
  */
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { SceneCard } from '../components/SceneCard';
 import { NavBar } from '../components/NavBar';
 import { useAuth } from '../contexts/AuthContext';
-import { listScenes, deleteScene, getMyScenes, type Scene, type PaginatedScenes } from '../lib/api';
-import { Search, Grid, User, Sparkles } from 'lucide-react';
+import { listScenes, deleteScene, getMyScenes, generateSceneDescription, type Scene, type PaginatedScenes } from '../lib/api';
+import { Search, Grid, User, Sparkles, X, Play, Eye, Calendar, Trash2 } from 'lucide-react';
 import { CloudBackground } from '../components/CloudBackground';
+import { useOutsideClick } from '../hooks/useOutsideClick';
+import { TiltedCard } from '../components/TiltedCard';
 
 type Tab = 'public' | 'my-scenes';
 
@@ -29,15 +30,75 @@ const SUGGESTIONS = [
 export function LibraryPage() {
   const { dbUser, getIdToken } = useAuth();
   const searchRef = useRef<HTMLInputElement>(null);
+  const expandedRef = useRef<HTMLDivElement>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
-  // Add class to body to make background transparent for cloud shader
+  // Expandable card state
+  const [activeScene, setActiveScene] = useState<Scene | null>(null);
+  const [generatingDescription, setGeneratingDescription] = useState(false);
+
+  // Add class to body for cloud shader background
   useEffect(() => {
     document.body.classList.add('has-cloud-bg');
     return () => {
       document.body.classList.remove('has-cloud-bg');
     };
   }, []);
+
+  // Generate description when card is expanded
+  useEffect(() => {
+    if (activeScene && !activeScene.description && !generatingDescription) {
+      generateDescription(activeScene._id);
+    }
+  }, [activeScene]);
+
+  // Handle escape key and body scroll lock
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setActiveScene(null);
+      }
+    }
+
+    if (activeScene) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'auto';
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [activeScene]);
+
+  const generateDescription = async (sceneId: string) => {
+    if (generatingDescription) return;
+    
+    try {
+      setGeneratingDescription(true);
+      console.log(`📝 [LIBRARY] Generating description for scene: ${sceneId}`);
+      
+      const description = await generateSceneDescription(sceneId);
+      
+      // Update active scene with new description
+      if (activeScene && activeScene._id === sceneId) {
+        setActiveScene({ ...activeScene, description });
+      }
+      
+      // Update in scenes list
+      setPublicScenes(prev => prev.map(s => s._id === sceneId ? { ...s, description } : s));
+      setMyScenes(prev => prev.map(s => s._id === sceneId ? { ...s, description } : s));
+      
+      console.log(`✅ [LIBRARY] Description generated: ${description.substring(0, 50)}...`);
+    } catch (err) {
+      console.error('Failed to generate description:', err);
+      // Don't show error to user, just silently fail
+    } finally {
+      setGeneratingDescription(false);
+    }
+  };
+
+  // Close on outside click
+  useOutsideClick(expandedRef, () => setActiveScene(null));
 
   const [tab, setTab] = useState<Tab>('public');
   const [publicScenes, setPublicScenes] = useState<Scene[]>([]);
@@ -116,6 +177,7 @@ export function LibraryPage() {
       await deleteScene(token, sceneId);
       setPublicScenes(prev => prev.filter(s => s._id !== sceneId));
       setMyScenes(prev => prev.filter(s => s._id !== sceneId));
+      setActiveScene(null);
     } catch (err) {
       console.error('Failed to delete scene:', err);
     }
@@ -124,6 +186,10 @@ export function LibraryPage() {
   const handleSuggestionClick = (suggestion: string) => {
     setSearchQuery(suggestion);
     setShowSuggestions(false);
+  };
+
+  const handleEnterWorld = (scene: Scene) => {
+    window.location.hash = `#explore?q=${encodeURIComponent(scene.concept)}&sceneId=${scene._id}`;
   };
 
   // Filter scenes based on search
@@ -139,6 +205,34 @@ export function LibraryPage() {
     ? SUGGESTIONS.filter(s => s.toLowerCase().includes(searchQuery.toLowerCase()))
     : SUGGESTIONS;
 
+  // Card overlay content
+  const CardOverlay = ({ scene }: { scene: Scene }) => (
+    <div className="absolute inset-0 p-4 flex flex-col justify-end pointer-events-none">
+      {/* Title & info */}
+      <div>
+        <h3 className="text-lg font-light text-white mb-0.5 leading-tight drop-shadow-lg">
+          {scene.title}
+        </h3>
+        <p className="text-white/70 text-xs font-mono truncate drop-shadow">
+          {scene.concept}
+        </p>
+        
+        {/* Meta row */}
+        <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/20">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs text-white/80 drop-shadow">
+              {scene.creatorName}
+            </span>
+          </div>
+          <div className="flex items-center gap-1 text-xs font-mono text-white/60">
+            <Eye size={12} />
+            <span>{scene.viewCount}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div 
       className="min-h-screen text-white relative"
@@ -149,6 +243,153 @@ export function LibraryPage() {
 
       {/* NavBar Pill */}
       <NavBar currentPage="library" />
+
+      {/* Backdrop for expanded card */}
+      <AnimatePresence>
+        {activeScene && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-md h-full w-full z-40"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Expanded Card Modal */}
+      <AnimatePresence>
+        {activeScene && (
+          <div className="fixed inset-0 grid place-items-center z-50 p-4">
+            {/* Close button */}
+            <motion.button
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="absolute top-6 right-6 flex items-center justify-center bg-white/10 backdrop-blur-md rounded-full h-12 w-12 border border-white/20 hover:bg-white/20 transition-colors z-50"
+              onClick={() => setActiveScene(null)}
+            >
+              <X className="h-6 w-6 text-white" />
+            </motion.button>
+
+            <motion.div
+              ref={expandedRef}
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="w-full max-w-[700px] max-h-[90vh] flex flex-col bg-black/60 backdrop-blur-2xl border border-white/10 rounded-3xl overflow-hidden shadow-2xl"
+            >
+              {/* Image */}
+              <div className="relative h-72 md:h-80">
+                {activeScene.thumbnailUrl ? (
+                  <img
+                    src={activeScene.thumbnailUrl}
+                    alt={activeScene.title}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-blue-900/40 to-slate-900/40 flex items-center justify-center">
+                    <div className="font-mono text-xs text-white/20 tracking-widest uppercase">no preview</div>
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
+                
+                {/* Title overlay on image */}
+                <div className="absolute bottom-0 left-0 right-0 p-6">
+                  <h2 className="text-3xl md:text-4xl font-light text-white mb-1 drop-shadow-lg">
+                    {activeScene.title}
+                  </h2>
+                  <p className="text-white/70 font-mono text-sm">
+                    {activeScene.concept}
+                  </p>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="p-6 flex-1 overflow-auto">
+                {/* Action buttons */}
+                <div className="flex gap-3 mb-6">
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => handleEnterWorld(activeScene)}
+                    className="flex-1 px-6 py-4 rounded-xl font-mono text-sm font-light bg-blue-500 hover:bg-blue-400 text-white transition-colors flex items-center justify-center gap-3"
+                  >
+                    <Play className="w-5 h-5 fill-white" />
+                    Enter World
+                  </motion.button>
+                </div>
+
+                {/* Stats */}
+                <div className="flex items-center gap-6 py-4 px-4 bg-white/5 rounded-xl mb-6">
+                  <div className="flex items-center gap-3 text-white/80">
+                    <span className="font-mono text-sm">{activeScene.creatorName}</span>
+                  </div>
+                  <div className="h-6 w-px bg-white/20" />
+                  <div className="flex items-center gap-2 text-white/60">
+                    <Eye className="w-4 h-4" />
+                    <span className="font-mono text-sm">{activeScene.viewCount}</span>
+                  </div>
+                  <div className="h-6 w-px bg-white/20" />
+                  <div className="flex items-center gap-2 text-white/60">
+                    <Calendar className="w-4 h-4" />
+                    <span className="font-mono text-sm">
+                      {new Date(activeScene.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Tags */}
+                {activeScene.tags && activeScene.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-6">
+                    {activeScene.tags.map((tag, i) => (
+                      <span
+                        key={i}
+                        className="text-xs font-mono px-4 py-2 rounded-full bg-white/5 text-white/70 border border-white/10"
+                      >
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Description */}
+                {generatingDescription ? (
+                  <div className="mb-6 py-4">
+                    <div className="flex items-center gap-3 text-white/50">
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span className="font-mono text-xs">Generating description...</span>
+                    </div>
+                  </div>
+                ) : activeScene.description ? (
+                  <p className="text-white/60 text-sm leading-relaxed mb-6">
+                    {activeScene.description}
+                  </p>
+                ) : (
+                  <div className="mb-6 py-4 text-white/40 font-mono text-xs">
+                    No description available
+                  </div>
+                )}
+
+                {/* Delete button for owner */}
+                {dbUser && activeScene.creatorId === dbUser._id && (
+                  <button
+                    onClick={() => {
+                      if (confirm(`Delete "${activeScene.title}"?`)) {
+                        handleDelete(activeScene._id);
+                      }
+                    }}
+                    className="flex items-center gap-2 text-red-400/70 hover:text-red-400 text-sm font-mono transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete this world
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Main Content */}
       <div className="relative z-10 min-h-screen flex flex-col pt-24">
@@ -161,7 +402,7 @@ export function LibraryPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
           >
-            <h1 className="text-3xl md:text-4xl font-bold mb-3 tracking-tight">
+            <h1 className="text-3xl md:text-4xl font-light mb-3 tracking-tight">
               explore worlds
             </h1>
             <p className="text-white/50 text-sm font-mono mb-8">
@@ -221,6 +462,13 @@ export function LibraryPage() {
           </motion.div>
         </div>
 
+        {/* Divider Line */}
+        <div className="px-6 mb-8">
+          <div className="max-w-7xl mx-auto">
+            <div className="h-px bg-white/10" />
+          </div>
+        </div>
+
         {/* Tabs */}
         <div className="px-6 mb-6">
           <div className="max-w-7xl mx-auto flex items-center justify-center gap-2">
@@ -273,7 +521,7 @@ export function LibraryPage() {
               {loading && scenes.length === 0 ? (
                 <motion.div 
                   key="loading"
-                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"
+                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
@@ -321,18 +569,30 @@ export function LibraryPage() {
                     </p>
                   )}
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                  {/* Tilted Card Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {scenes.map((scene, index) => (
                       <motion.div
                         key={scene._id}
-                        initial={{ opacity: 0, y: 20 }}
+                        initial={{ opacity: 0, y: 30 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: index * 0.03, duration: 0.4 }}
+                        transition={{ delay: index * 0.05, duration: 0.5 }}
+                        className="group"
                       >
-                        <SceneCard
-                          scene={scene}
-                          onDelete={dbUser && scene.creatorId === dbUser._id ? handleDelete : undefined}
-                          canDelete={!!(dbUser && scene.creatorId === dbUser._id)}
+                        <TiltedCard
+                          imageSrc={scene.thumbnailUrl || undefined}
+                          altText={scene.title}
+                          containerHeight="280px"
+                          containerWidth="100%"
+                          imageHeight="100%"
+                          imageWidth="100%"
+                          scaleOnHover={1.05}
+                          rotateAmplitude={10}
+                          showTooltip={true}
+                          tooltipText={`Enter ${scene.title}`}
+                          displayOverlayContent={true}
+                          overlayContent={<CardOverlay scene={scene} />}
+                          onClick={() => setActiveScene(scene)}
                         />
                       </motion.div>
                     ))}

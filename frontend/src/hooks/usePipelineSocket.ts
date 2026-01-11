@@ -194,6 +194,8 @@ export function usePipelineSocket() {
       colliderMeshUrl: null,
       worldId: null,
       thumbnailBase64: null,
+      generatedImage: null,
+      generatedImageMime: null,
       error: null,
       isConnected: state.isConnected,
     });

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { FirstPersonScene, type FirstPersonSceneHandle } from './FirstPersonScene';
 import { SubtitleOverlay } from './SubtitleOverlay';
 import { EducationOverlay } from './EducationOverlay';
@@ -27,12 +27,11 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
   const [splatUrl, setSplatUrl] = useState<string>('');
   const [colliderMeshUrl, setColliderMeshUrl] = useState<string | undefined>(undefined);
   const [worldId, setWorldId] = useState<string | undefined>(undefined);
-  const [audioCurrentTime, setAudioCurrentTime] = useState(0);
-  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const [audioCurrentTime] = useState(0);
+  const [isAudioPlaying] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [thumbnailDataUrl, setThumbnailDataUrl] = useState<string | null>(null);
   const useNewLoadingScreen = true;
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const sceneRef = useRef<FirstPersonSceneHandle | null>(null);
 
   // Callback for NarrationOverlay to get screenshot
@@ -67,14 +66,25 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
           // Use saved orchestration if available, otherwise generate
           if (savedOrchestration) {
             console.log('✅ [PIPELINE] Using saved orchestration');
+            // Convert API OrchestrationData to GeminiOrchestrationResponse format
             setOrchestration({
               concept,
+              sceneId: 'saved',
               learningObjectives: savedOrchestration.learningObjectives,
-              keyFacts: savedOrchestration.keyFacts,
+              keyFacts: savedOrchestration.keyFacts.map((fact: string) => ({ text: fact, source: '' })),
               narrationScript: savedOrchestration.narrationScript,
-              subtitleLines: savedOrchestration.subtitleLines,
-              callouts: savedOrchestration.callouts,
-              sources: savedOrchestration.sources,
+              subtitleLines: savedOrchestration.subtitleLines.map((line: { text: string; startTime: number; endTime: number }) => ({ 
+                t: line.startTime, 
+                text: line.text 
+              })),
+              callouts: savedOrchestration.callouts.map((callout: { id: string; text: string; position: { x: number; y: number; z: number } }) => ({
+                text: callout.text,
+                anchor: 'center' as const
+              })),
+              sources: savedOrchestration.sources.map((source: { title: string; url: string }) => ({
+                label: source.title,
+                url: source.url
+              })),
             });
           } else {
             // Generate orchestration in background
@@ -94,7 +104,7 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
         const existingScene = findSceneByConcept(concept);
         if (existingScene) {
           console.log('✅ [PIPELINE] Found existing LOCAL scene:', existingScene);
-          setSplatUrl(existingScene.splatUrl);
+          setSplatUrl(existingScene.splatLowUrl);
           setMode('loading_scene');
           
           // Generate orchestration in background
@@ -235,7 +245,161 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
   if (mode === 'loading_scene' && splatUrl) {
     // Render the scene immediately - orchestration will load in background
     return (
-      <div className="fixed inset-0 z-50">
+      <AnimatePresence mode="wait">
+        <motion.div
+          key="scene-loading"
+          className="fixed inset-0 z-50"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <FirstPersonScene
+            ref={sceneRef}
+            splatUrl={splatUrl}
+            colliderMeshUrl={colliderMeshUrl}
+            onSceneReady={handleSceneReady}
+            onScreenshotCaptured={handleScreenshotCaptured}
+          />
+
+          {/* Voice Q&A Narration */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.8, duration: 0.8 }}
+          >
+            <NarrationOverlay
+              getScreenshot={getScreenshot}
+              concept={concept}
+              enabled={true}
+            />
+          </motion.div>
+
+          {/* Show minimal UI while orchestration loads */}
+          <AnimatePresence>
+            {orchestration && (
+              <>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ delay: 1, duration: 0.8, ease: 'easeOut' }}
+                >
+                  <SubtitleOverlay
+                    subtitleLines={orchestration.subtitleLines}
+                    audioCurrentTime={audioCurrentTime}
+                    isPlaying={isAudioPlaying}
+                  />
+                </motion.div>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ delay: 1.2, duration: 0.8, ease: 'easeOut' }}
+                >
+                  <EducationOverlay
+                    concept={orchestration.concept}
+                    learningObjectives={orchestration.learningObjectives}
+                    keyFacts={orchestration.keyFacts}
+                    callouts={orchestration.callouts}
+                    sources={orchestration.sources}
+                  />
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+
+          <div className="absolute top-6 right-6 flex gap-2 z-50">
+            <motion.button
+              onClick={() => setShowSaveModal(true)}
+              className="glass px-4 py-2 rounded-full font-mono text-sm text-white hover:bg-white/30 transition-colors"
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1.4, duration: 0.6, ease: 'easeOut' }}
+            >
+              save to library
+            </motion.button>
+            {onExit && (
+              <motion.button
+                onClick={onExit}
+                className="glass px-4 py-2 rounded-full font-mono text-sm text-white hover:bg-white/30 transition-colors"
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 1.4, duration: 0.6, ease: 'easeOut' }}
+              >
+                exit
+              </motion.button>
+            )}
+          </div>
+
+          <SaveToLibraryModal
+            isOpen={showSaveModal}
+            onClose={() => setShowSaveModal(false)}
+            concept={concept}
+            splatUrl={splatUrl}
+            colliderMeshUrl={colliderMeshUrl}
+            worldId={worldId}
+            thumbnailDataUrl={thumbnailDataUrl}
+            orchestration={orchestration ? {
+              learningObjectives: orchestration.learningObjectives,
+              keyFacts: orchestration.keyFacts.map(fact => typeof fact === 'string' ? fact : fact.text),
+              narrationScript: orchestration.narrationScript,
+              subtitleLines: orchestration.subtitleLines.map(line => ({
+                text: line.text,
+                startTime: line.t,
+                endTime: line.t + 3 // Approximate end time
+              })),
+              callouts: orchestration.callouts.map(callout => ({
+                id: callout.text.substring(0, 10),
+                text: callout.text,
+                position: { x: 0, y: 0, z: 0 }
+              })),
+              sources: orchestration.sources.map(source => ({
+                title: source.label,
+                url: source.url
+              })),
+            } : null}
+            onSaveComplete={() => {
+              setShowSaveModal(false);
+            }}
+          />
+        </motion.div>
+      </AnimatePresence>
+    );
+  }
+
+  // Waiting for orchestration
+  if (!orchestration || !splatUrl) {
+    return (
+      <motion.div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.8 }}
+      >
+        <motion.p
+          className="font-mono text-white text-glow"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.6 }}
+        >
+          {!splatUrl ? 'Loading 3D environment...' : 'Preparing educational content...'}
+        </motion.p>
+      </motion.div>
+    );
+  }
+
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key="scene-in"
+        className="fixed inset-0 z-50"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+      >
         <FirstPersonScene
           ref={sceneRef}
           splatUrl={splatUrl}
@@ -245,29 +409,43 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
         />
 
         {/* Voice Q&A Narration */}
-        <NarrationOverlay
-          getScreenshot={getScreenshot}
-          concept={concept}
-          enabled={true}
-        />
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.8, duration: 0.8 }}
+        >
+          <NarrationOverlay
+            getScreenshot={getScreenshot}
+            concept={concept}
+            enabled={true}
+          />
+        </motion.div>
 
-        {/* Show minimal UI while orchestration loads */}
-        {orchestration && (
-          <>
-            <SubtitleOverlay
-              subtitleLines={orchestration.subtitleLines}
-              audioCurrentTime={audioCurrentTime}
-              isPlaying={isAudioPlaying}
-            />
-            <EducationOverlay
-              concept={orchestration.concept}
-              learningObjectives={orchestration.learningObjectives}
-              keyFacts={orchestration.keyFacts}
-              callouts={orchestration.callouts}
-              sources={orchestration.sources}
-            />
-          </>
-        )}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 1, duration: 0.8, ease: 'easeOut' }}
+        >
+          <SubtitleOverlay
+            subtitleLines={orchestration.subtitleLines}
+            audioCurrentTime={audioCurrentTime}
+            isPlaying={isAudioPlaying}
+          />
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 1.2, duration: 0.8, ease: 'easeOut' }}
+        >
+          <EducationOverlay
+            concept={orchestration.concept}
+            learningObjectives={orchestration.learningObjectives}
+            keyFacts={orchestration.keyFacts}
+            callouts={orchestration.callouts}
+            sources={orchestration.sources}
+          />
+        </motion.div>
 
         <div className="absolute top-6 right-6 flex gap-2 z-50">
           <motion.button
@@ -275,7 +453,7 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
             className="glass px-4 py-2 rounded-full font-mono text-sm text-white hover:bg-white/30 transition-colors"
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
+            transition={{ delay: 1.4, duration: 0.6, ease: 'easeOut' }}
           >
             save to library
           </motion.button>
@@ -285,7 +463,7 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
               className="glass px-4 py-2 rounded-full font-mono text-sm text-white hover:bg-white/30 transition-colors"
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
+              transition={{ delay: 1.4, duration: 0.6, ease: 'easeOut' }}
             >
               exit
             </motion.button>
@@ -302,105 +480,28 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
           thumbnailDataUrl={thumbnailDataUrl}
           orchestration={orchestration ? {
             learningObjectives: orchestration.learningObjectives,
-            keyFacts: orchestration.keyFacts,
+            keyFacts: orchestration.keyFacts.map(fact => typeof fact === 'string' ? fact : fact.text),
             narrationScript: orchestration.narrationScript,
-            subtitleLines: orchestration.subtitleLines,
-            callouts: orchestration.callouts,
-            sources: orchestration.sources,
+            subtitleLines: orchestration.subtitleLines.map(line => ({
+              text: line.text,
+              startTime: line.t,
+              endTime: line.t + 3 // Approximate end time
+            })),
+            callouts: orchestration.callouts.map(callout => ({
+              id: callout.text.substring(0, 10),
+              text: callout.text,
+              position: { x: 0, y: 0, z: 0 }
+            })),
+            sources: orchestration.sources.map(source => ({
+              title: source.label,
+              url: source.url
+            })),
           } : null}
           onSaveComplete={() => {
             setShowSaveModal(false);
           }}
         />
-      </div>
-    );
-  }
-
-  // Waiting for orchestration
-  if (!orchestration || !splatUrl) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
-        <p className="font-mono text-white text-glow">
-          {!splatUrl ? 'Loading 3D environment...' : 'Preparing educational content...'}
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="fixed inset-0 z-50">
-      <FirstPersonScene
-        ref={sceneRef}
-        splatUrl={splatUrl}
-        colliderMeshUrl={colliderMeshUrl}
-        onSceneReady={handleSceneReady}
-        onScreenshotCaptured={handleScreenshotCaptured}
-      />
-
-      {/* Voice Q&A Narration */}
-      <NarrationOverlay
-        getScreenshot={getScreenshot}
-        concept={concept}
-        enabled={true}
-      />
-
-      <SubtitleOverlay
-        subtitleLines={orchestration.subtitleLines}
-        audioCurrentTime={audioCurrentTime}
-        isPlaying={isAudioPlaying}
-      />
-
-      <EducationOverlay
-        concept={orchestration.concept}
-        learningObjectives={orchestration.learningObjectives}
-        keyFacts={orchestration.keyFacts}
-        callouts={orchestration.callouts}
-        sources={orchestration.sources}
-      />
-
-      <div className="absolute top-6 right-6 flex gap-2 z-50">
-        <motion.button
-          onClick={() => setShowSaveModal(true)}
-          className="glass px-4 py-2 rounded-full font-mono text-sm text-white hover:bg-white/30 transition-colors"
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-        >
-          save to library
-        </motion.button>
-        {onExit && (
-          <motion.button
-            onClick={onExit}
-            className="glass px-4 py-2 rounded-full font-mono text-sm text-white hover:bg-white/30 transition-colors"
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-          >
-            exit
-          </motion.button>
-        )}
-      </div>
-
-      <SaveToLibraryModal
-        isOpen={showSaveModal}
-        onClose={() => setShowSaveModal(false)}
-        concept={concept}
-        splatUrl={splatUrl}
-        colliderMeshUrl={colliderMeshUrl}
-        worldId={worldId}
-        thumbnailDataUrl={thumbnailDataUrl}
-        orchestration={orchestration ? {
-          learningObjectives: orchestration.learningObjectives,
-          keyFacts: orchestration.keyFacts,
-          narrationScript: orchestration.narrationScript,
-          subtitleLines: orchestration.subtitleLines,
-          callouts: orchestration.callouts,
-          sources: orchestration.sources,
-        } : null}
-        onSaveComplete={() => {
-          setShowSaveModal(false);
-        }}
-      />
-    </div>
+      </motion.div>
+    </AnimatePresence>
   );
 }

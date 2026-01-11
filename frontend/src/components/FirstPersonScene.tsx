@@ -15,13 +15,11 @@ export interface FirstPersonSceneHandle {
 }
 
 // Movement constants - Minecraft creative mode style
-const MOVE_ACCELERATION = 25; // How fast you build up speed
-const MOVE_MAX_SPEED = 3.5; // Maximum movement speed
-const MOVE_SPRINT_MULTIPLIER = 2.2; // Sprint speed boost
+const MOVE_ACCELERATION = 15; // How fast you build up speed
+const MOVE_MAX_SPEED = 2.0; // Maximum movement speed
+const MOVE_SPRINT_MULTIPLIER = 1.8; // Sprint speed boost
 const MOVE_DAMPING = 0.88; // Horizontal friction (0-1, lower = more friction)
 const MOVE_VERTICAL_DAMPING = 0.85; // Vertical friction
-const MOUSE_SENSITIVITY = 0.002;
-const PLAYER_HEIGHT = 1.7; // Eye height in meters
 const PLAYER_RADIUS = 0.3; // Collision radius
 const GROUND_LEVEL = -0.5; // Minimum Y position (approximate ground)
 const USE_GROUND_FALLBACK = true; // Enable ground collision even without collider mesh

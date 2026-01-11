@@ -1,11 +1,11 @@
 /**
  * Scene card component for library display
- * Matches the app's blue/glass aesthetic with animated hover previews
+ * Matches the app's blue/glass aesthetic with animated hover effects
  */
 
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Eye, Heart, Share2, Trash2 } from 'lucide-react';
+import { Eye, Heart, Share2, Trash2, Play } from 'lucide-react';
 import type { Scene } from '../lib/api';
 
 interface SceneCardProps {
@@ -15,11 +15,12 @@ interface SceneCardProps {
 }
 
 export function SceneCard({ scene, onDelete, canDelete = false }: SceneCardProps) {
+  const [isHovered, setIsHovered] = useState(false);
   const [showAnimated, setShowAnimated] = useState(false);
   const [gifLoaded, setGifLoaded] = useState(false);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Preload animated GIF on mount for smooth transitions
+  // Preload animated GIF on mount for smooth transitions (if available)
   useEffect(() => {
     if (scene.animatedThumbnailUrl) {
       const img = new Image();
@@ -42,15 +43,17 @@ export function SceneCard({ scene, onDelete, canDelete = false }: SceneCardProps
   };
 
   const handleMouseEnter = () => {
-    // Start timer for delayed animation reveal
+    setIsHovered(true);
+    // Start timer for delayed animation reveal (if GIF exists)
     if (scene.animatedThumbnailUrl && gifLoaded) {
       hoverTimerRef.current = setTimeout(() => {
         setShowAnimated(true);
-      }, 1000); // 1 second delay
+      }, 800);
     }
   };
 
   const handleMouseLeave = () => {
+    setIsHovered(false);
     // Clear timer and reset to static image
     if (hoverTimerRef.current) {
       clearTimeout(hoverTimerRef.current);
@@ -66,29 +69,39 @@ export function SceneCard({ scene, onDelete, canDelete = false }: SceneCardProps
 
   return (
     <motion.div
-      className="relative rounded-xl overflow-hidden cursor-pointer group bg-black/40 border border-white/5 hover:border-white/20 transition-all duration-300"
+      className="relative rounded-xl overflow-hidden cursor-pointer group bg-black/40 border border-white/5 hover:border-blue-500/30 transition-all duration-300"
       whileHover={{ 
-        y: -4,
-        boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
+        y: -6,
+        boxShadow: '0 25px 50px rgba(0,0,0,0.5), 0 0 40px rgba(59, 130, 246, 0.15)',
       }}
       onClick={handleClick}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      {/* Thumbnail Image - Full Height Background Effect */}
+      {/* Thumbnail Image with Ken Burns Effect */}
       <div className="aspect-[4/3] w-full overflow-hidden relative">
         {imageUrl ? (
           <>
-            <img
+            {/* Main image with parallax/Ken Burns effect on hover */}
+            <motion.img
               src={imageUrl}
               alt={scene.title}
-              className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+              className="w-full h-full object-cover"
+              animate={{
+                scale: isHovered ? 1.15 : 1,
+                x: isHovered ? '2%' : '0%',
+                y: isHovered ? '-2%' : '0%',
+              }}
+              transition={{
+                duration: isHovered ? 8 : 0.5,
+                ease: isHovered ? 'linear' : 'easeOut',
+              }}
               onError={(e) => {
-                // Fallback if image fails to load
                 (e.target as HTMLImageElement).style.display = 'none';
               }}
             />
-            {/* Animated indicator */}
+            
+            {/* Animated GIF indicator */}
             {showAnimated && scene.animatedThumbnailUrl && (
               <div className="absolute top-3 left-3 px-2 py-1 rounded-full bg-black/60 backdrop-blur-sm">
                 <span className="text-[10px] font-mono text-white/80 flex items-center gap-1">
@@ -97,6 +110,18 @@ export function SceneCard({ scene, onDelete, canDelete = false }: SceneCardProps
                 </span>
               </div>
             )}
+
+            {/* Play button hint on hover */}
+            <motion.div 
+              className="absolute inset-0 flex items-center justify-center pointer-events-none"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: isHovered ? 1 : 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="w-14 h-14 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20">
+                <Play className="w-6 h-6 text-white fill-white ml-1" />
+              </div>
+            </motion.div>
           </>
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-blue-900/40 to-slate-900/40 flex items-center justify-center">
@@ -105,7 +130,7 @@ export function SceneCard({ scene, onDelete, canDelete = false }: SceneCardProps
         )}
         
         {/* Gradient Overlay for Text Readability */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-80 group-hover:opacity-90 transition-opacity" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent opacity-80 group-hover:opacity-95 transition-opacity" />
         
         {/* Top Right Actions (Hidden until hover) */}
         <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 transform translate-y-2 group-hover:translate-y-0">

@@ -207,3 +207,20 @@ export function getProxiedSplatUrl(originalUrl: string): string {
   return `${API_URL}/api/proxy/splat?url=${encodeURIComponent(originalUrl)}`;
 }
 
+/**
+ * Generate LLM description for a scene
+ */
+export async function generateSceneDescription(sceneId: string): Promise<string> {
+  const response = await fetch(`${API_URL}/api/scenes/${sceneId}/generate-description`, {
+    method: 'POST',
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to generate description');
+  }
+
+  const data = await response.json();
+  return data.description;
+}
+
