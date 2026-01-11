@@ -5,6 +5,7 @@ import { SiReact, SiTypescript, SiThreedotjs, SiGoogle, SiMongodb } from 'react-
 import { ShaderBackground } from './components/ShaderBackground';
 import { LoadingScreen } from './components/LoadingScreen';
 import { DecryptedText } from './components/DecryptedText';
+import { GaussianSplatViewer } from './components/GaussianSplatViewer';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
@@ -12,6 +13,7 @@ export default function App() {
   const [typedText, setTypedText] = useState('');
   const fullText = "ancient rome";
   const [showFullText, setShowFullText] = useState(false);
+  const [showSplatViewer, setShowSplatViewer] = useState(false);
 
   useEffect(() => {
     if (isListening && !showFullText) {
@@ -22,6 +24,10 @@ export default function App() {
         if (i > fullText.length) {
           clearInterval(typingInterval);
           setShowFullText(true);
+          // Transition to 3D viewer after typing completes
+          setTimeout(() => {
+            setShowSplatViewer(true);
+          }, 1000);
         }
       }, 100);
       return () => clearInterval(typingInterval);
@@ -37,6 +43,23 @@ export default function App() {
 
   if (isLoading) {
     return <LoadingScreen onComplete={() => setIsLoading(false)} minDuration={1500} />;
+  }
+
+  // Show gaussian splat viewer when triggered
+  if (showSplatViewer) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 1 }}
+        className="w-full h-screen"
+      >
+        <GaussianSplatViewer
+          splatUrl="/scenes/test.ply"
+          onLoaded={() => console.log('Scene loaded!')}
+        />
+      </motion.div>
+    );
   }
 
   return (
