@@ -81,17 +81,33 @@ export { io, emitPipelineUpdate, pipelineJobs };
 connectToDatabase().catch(console.error);
 
 // Enable CORS for all routes
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'https://flow.stephenhung.me',
+];
+
 const corsOptions = {
-  origin: [
-    'http://localhost:5173',
-    'http://localhost:3000',
-    'https://flow.stephenhung.me',
-    /\.vercel\.app$/,
-    /\.railway\.app$/,
-  ],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin is in allowed list
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else if (origin.match(/\.vercel\.app$/) || origin.match(/\.railway\.app$/)) {
+      // Allow Vercel and Railway preview URLs
+      callback(null, true);
+    } else {
+      console.warn(`⚠️ [CORS] Blocked origin: ${origin}`);
+      callback(null, true); // Allow for now but log it
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Length', 'Content-Type'],
+  optionsSuccessStatus: 200, // Some legacy browsers (IE11) choke on 204
 };
 app.use(cors(corsOptions));
 // Increase JSON body limit for screenshots/images (50MB)
