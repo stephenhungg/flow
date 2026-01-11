@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+:root {
+  --void: #1B1B1B;
+  --bg: #1B1B1B;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  font-family: 'Space Mono', monospace;
+  color: white;
+  background-color: #050a14;
+  overflow-x: hidden;
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+}
+
+/* Typography - Text Stroke Effect */
+.text-stroke {
+  color: transparent;
+  -webkit-text-stroke: 1.5px rgba(255, 255, 255, 0.9);
+  text-shadow: 
+    0 0 15px rgba(255, 255, 255, 0.15),
+    0 0 30px rgba(255, 255, 255, 0.1);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.font-display {
+  font-family: 'Space Mono', monospace;
+}
+
+.font-mono {
+  font-family: 'Space Mono', monospace;
+}
+
+/* Text shadow for body text */
+.text-glow {
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+}
+
+.text-glow-subtle {
+  text-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+}
+
+/* Glassmorphism */
+.glass {
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 0 25px rgba(255, 255, 255, 0.15);
+}
+
+.glass-strong {
+  background: rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 0 25px rgba(255, 255, 255, 0.15);
+}
