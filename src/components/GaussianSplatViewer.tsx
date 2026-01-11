@@ -48,7 +48,7 @@ export const GaussianSplatViewer = ({ splatUrl, onLoaded }: GaussianSplatViewerP
       selfDrivenMode: false,
       renderer: renderer as any,
       camera: camera as any,
-      useBuiltInControls: true,
+      useBuiltInControls: false,
     });
 
 
