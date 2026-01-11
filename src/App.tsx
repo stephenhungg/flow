@@ -55,7 +55,7 @@ export default function App() {
         className="w-full h-screen"
       >
         <GaussianSplatViewer
-          splatUrl="/scenes/test.ply"
+          splatUrl="/scenes/train.splat"
           onLoaded={() => console.log('Scene loaded!')}
         />
       </motion.div>
