@@ -50,3 +50,4 @@ server.log
 
 # OS files
 Thumbs.db
+*.env.production
