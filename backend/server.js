@@ -1597,7 +1597,7 @@ app.use((req, res) => {
 });
 
 // Listen on all interfaces (0.0.0.0) for Railway/cloud deployments
-const HOST = process.env.HOST || '0.0.0.0';
+const HOST = '0.0.0.0';
 httpServer.listen(PORT, HOST, () => {
   console.log(`🚀 [PROXY] Server running on http://${HOST}:${PORT}`);
   console.log(`🔌 [SOCKET] WebSocket server ready`);
