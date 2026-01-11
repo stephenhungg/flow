@@ -28,7 +28,6 @@ export function DecryptedText({
     const startTime = Date.now();
     let currentIndex = 0;
     let scrambleCount = 0;
-    const maxScrambles = 3;
 
     const interval = setInterval(() => {
       const elapsed = Date.now() - startTime;

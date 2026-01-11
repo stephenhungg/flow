@@ -87,13 +87,13 @@ export default function App() {
             className="mt-12 flex items-center justify-center gap-4"
           >
             <motion.div 
-              className={\`relative flex items-center justify-center w-14 h-14 rounded-full cursor-pointer transition-all duration-300
-                \${isListening ? 'glass-strong' : 'glass hover:bg-white/20'}\`}
+              className={`relative flex items-center justify-center w-14 h-14 rounded-full cursor-pointer transition-all duration-300
+                ${isListening ? 'glass-strong' : 'glass hover:bg-white/20'}`}
               onClick={handleMicClick}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
-              <Mic className={\`w-6 h-6 \${isListening ? 'text-black' : 'text-white'}\`} />
+              <Mic className={`w-6 h-6 ${isListening ? 'text-black' : 'text-white'}`} />
               {isListening && (
                 <motion.div
                   initial={{ scale: 0.8, opacity: 0 }}
