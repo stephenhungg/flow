@@ -52,26 +52,21 @@ export const GaussianSplatViewer = ({ splatUrl, onLoaded }: GaussianSplatViewerP
     });
 
 
-    // Initialize viewer
-    viewer.init().then(() => {
-      console.log('Viewer initialized');
-
-      // Load the splat scene
-      return viewer!
-        .addSplatScene(splatUrl, {
-          progressiveLoad: true,
-        })
-        .then(() => {
-          console.log('Splat scene loaded successfully');
-          setIsLoading(false);
-          viewer!.start();
-          if (onLoaded) onLoaded();
-        })
-        .catch((err: Error) => {
-          console.error('Error loading splat scene:', err);
-          setError(`Failed to load 3D scene: ${err.message}`);
-          setIsLoading(false);
-        });
+    // Load the splat scene directly (no init() needed)
+    viewer.addSplatScene(splatUrl, {
+      progressiveLoad: true,
+    })
+      .then(() => {
+        console.log('Splat scene loaded successfully');
+        setIsLoading(false);
+        viewer!.start();
+        if (onLoaded) onLoaded();
+      })
+      .catch((err: Error) => {
+        console.error('Error loading splat scene:', err);
+        setError(`Failed to load 3D scene: ${err.message}`);
+        setIsLoading(false);
+      });
     }).catch((err: Error) => {
       console.error('Error initializing viewer:', err);
       setError(`Failed to initialize viewer: ${err.message}`);
