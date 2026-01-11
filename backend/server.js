@@ -110,6 +110,9 @@ const corsOptions = {
   optionsSuccessStatus: 200, // Some legacy browsers (IE11) choke on 204
 };
 app.use(cors(corsOptions));
+// Handle preflight requests explicitly
+app.options('*', cors(corsOptions));
+
 // Increase JSON body limit for screenshots/images (50MB)
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
