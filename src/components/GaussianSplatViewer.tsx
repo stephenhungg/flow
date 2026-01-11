@@ -28,29 +28,29 @@ export const GaussianSplatViewer = ({ splatUrl, onLoaded }: GaussianSplatViewerP
     console.log('Initializing viewer with splat:', splatUrl);
 
     // Initialize viewer with simpler config
+
+    // Create renderer and append to container
+    const renderWidth = container.clientWidth || 800;
+    const renderHeight = container.clientHeight || 600;
+    
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true
+    } as any);
+    renderer.setSize(renderWidth, renderHeight);
+    container.appendChild(renderer.domElement);
+
+    // Create camera
+    const camera = new THREE.PerspectiveCamera(75, renderWidth / renderHeight, 0.1, 1000);
+    camera.position.set(0, 0, 5);
+    
+    // Initialize viewer with selfDrivenMode: false
     viewer = new Viewer({
       selfDrivenMode: false,
-      
-      renderer: {
-        antialias: true,
-        alpha: false,
-      },
-      camera: {
-        fov: 75,
-        near: 0.1,
-        far: 1000,
-        position: [0, 0, 5], // Back from origin
-      },
-      controls: {
-        enabled: true,
-        enableRotate: true,
-        enablePan: true,
-        enableZoom: true,
-      },
-      useBuiltInControls: true, // Use built-in controls for now
-    });
+      renderer: renderer as any,
+      camera: camera as any,
+      useBuiltInControls: true,
+    } as any);
 
-    viewerRef.current = viewer;
 
     // Initialize viewer
     viewer.init().then(() => {
@@ -71,12 +71,12 @@ export const GaussianSplatViewer = ({ splatUrl, onLoaded }: GaussianSplatViewerP
           console.error('Error loading splat scene:', err);
           setError(`Failed to load 3D scene: ${err.message}`);
           setIsLoading(false);
-        });
+        } as any);
     }).catch((err: Error) => {
       console.error('Error initializing viewer:', err);
       setError(`Failed to initialize viewer: ${err.message}`);
       setIsLoading(false);
-    });
+    } as any);
 
     // Keyboard controls for WASD movement
     const handleKeyDown = (e: KeyboardEvent) => {
