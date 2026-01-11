@@ -85,6 +85,7 @@ app.use(cors({
   origin: [
     'http://localhost:5173',
     'http://localhost:3000',
+    'https://flow.stephenhung.me',
     'https://flow-git-main-stephen-hungs-projects-d01c13ef.vercel.app',
     'https://flow-f295vyvxr-stephen-hungs-projects-d01c13ef.vercel.app',
     /\.vercel\.app$/, // Allow all Vercel preview deployments
