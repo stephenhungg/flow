@@ -126,6 +126,11 @@ app.use((req, res, next) => {
   next();
 });
 
+// Health check - Define early to ensure availability
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // Configure multer for file uploads (in-memory storage)
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -1575,11 +1580,6 @@ Natural lighting, realistic textures, explorable space with clear pathways and i
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
-
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
-});
 
 // Global error handler (must be before catch-all)
 app.use((err, req, res, next) => {

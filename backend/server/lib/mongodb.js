@@ -14,15 +14,16 @@ const __dirname = path.dirname(__filename);
 // backend/server/lib/ -> ../ -> backend/server/ -> ../ -> backend/ -> ../ -> root
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
-const MONGODB_URI = process.env.MONGODB_URI;
-if (!MONGODB_URI) {
-  throw new Error('MONGODB_URI environment variable is required');
-}
-
 let client = null;
 let db = null;
 
 export async function connectToDatabase() {
+  const MONGODB_URI = process.env.MONGODB_URI;
+  if (!MONGODB_URI) {
+    console.error('❌ [DB] MONGODB_URI environment variable is not defined');
+    throw new Error('MONGODB_URI environment variable is required');
+  }
+
   if (client && db) {
     return { client, db };
   }
