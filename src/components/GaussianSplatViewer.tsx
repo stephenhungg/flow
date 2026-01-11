@@ -17,7 +17,7 @@ export const GaussianSplatViewer = ({ splatUrl, onLoaded }: GaussianSplatViewerP
   const keysPressed = useRef<Set<string>>(new Set());
   const velocity = useRef(new THREE.Vector3());
   const moveSpeed = 0.15;
-  const animationFrameRef = useRef<number>();
+  const animationFrameRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -30,7 +30,7 @@ export const GaussianSplatViewer = ({ splatUrl, onLoaded }: GaussianSplatViewerP
     // Initialize viewer with simpler config
     viewer = new Viewer({
       selfDrivenMode: false,
-      rootElement: container,
+      
       renderer: {
         antialias: true,
         alpha: false,
