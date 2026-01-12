@@ -517,13 +517,17 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    // Check if admin user
+    const userEmail = user.email?.toLowerCase();
+    const isAdmin = ADMIN_EMAILS.includes(userEmail);
+    
     res.json({
       _id: user._id.toString(),
       firebaseUid: user.firebaseUid,
       email: user.email,
       displayName: user.displayName,
       photoURL: user.photoURL,
-      credits: user.credits || 0,
+      credits: isAdmin ? Infinity : (user.credits || 0),
     });
   } catch (error) {
     console.error('❌ [AUTH] Get me error:', error);
