@@ -1413,16 +1413,21 @@ app.post('/api/pipeline/start', authMiddleware, creditCheckMiddleware, rateLimit
       return res.status(400).json({ error: 'Concept is required' });
     }
 
-    // Deduct credits immediately (before generation starts)
-    const usersCollection = getUsersCollection();
-    const result = await usersCollection.findOneAndUpdate(
-      { _id: req.userId },
-      { $inc: { credits: -CREDITS_PER_GENERATION } },
-      { returnDocument: 'after' }
-    );
-    
-    const newCredits = result.value?.credits || result?.credits || 0;
-    console.log(`💰 [CREDITS] Deducted ${CREDITS_PER_GENERATION} credit(s). User now has ${newCredits} credit(s).`);
+    // Deduct credits immediately (before generation starts) - skip for admin
+    let newCredits = Infinity;
+    if (!req.isAdmin) {
+      const usersCollection = getUsersCollection();
+      const result = await usersCollection.findOneAndUpdate(
+        { _id: req.userId },
+        { $inc: { credits: -CREDITS_PER_GENERATION } },
+        { returnDocument: 'after' }
+      );
+      
+      newCredits = result.value?.credits || result?.credits || 0;
+      console.log(`💰 [CREDITS] Deducted ${CREDITS_PER_GENERATION} credit(s). User now has ${newCredits} credit(s).`);
+    } else {
+      console.log(`💰 [CREDITS] Admin user - no credits deducted`);
+    }
 
     // Store job info
     pipelineJobs.set(jobId, {
