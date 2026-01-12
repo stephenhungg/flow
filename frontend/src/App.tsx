@@ -87,7 +87,10 @@ export default function App() {
 
   // Handle Stripe checkout redirect
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    // Parse query params from hash (Stripe puts them after #credits)
+    const hash = window.location.hash;
+    const hashParts = hash.split('?');
+    const params = hashParts.length > 1 ? new URLSearchParams(hashParts[1]) : new URLSearchParams();
     const creditsStatus = params.get('credits');
     
     if (creditsStatus === 'success') {
@@ -96,8 +99,8 @@ export default function App() {
       console.log('✅ [CREDITS] Purchase successful, session:', sessionId);
       
       // Remove query params from URL but keep #credits hash
-      const hash = window.location.hash.split('?')[0];
-      window.history.replaceState({}, '', window.location.pathname + hash);
+      const cleanHash = hashParts[0];
+      window.history.replaceState({}, '', window.location.pathname + cleanHash);
       
       // Verify session and add credits (fallback if webhook hasn't fired)
       if (sessionId) {
@@ -133,8 +136,8 @@ export default function App() {
       }
     } else if (creditsStatus === 'cancelled') {
       // Remove query params but keep #credits hash
-      const hash = window.location.hash.split('?')[0];
-      window.history.replaceState({}, '', window.location.pathname + hash);
+      const cleanHash = hashParts[0];
+      window.history.replaceState({}, '', window.location.pathname + cleanHash);
     }
   }, [getIdToken]);
 
