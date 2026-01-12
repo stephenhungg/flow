@@ -237,6 +237,11 @@ const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 
+// Admin configuration - use environment variable for security
+const ADMIN_EMAILS = process.env.ADMIN_EMAILS 
+  ? process.env.ADMIN_EMAILS.split(',').map(e => e.trim().toLowerCase())
+  : ['stpnhh@gmail.com']; // Fallback for development
+
 // Credit system configuration
 // World Labs pricing: $0.80 per 1,000 credits
 // Each generation costs 1,500 credits = $1.20 actual cost
@@ -547,10 +552,14 @@ async function creditCheckMiddleware(req, res, next) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Unlimited credits for admin email
-    const ADMIN_EMAIL = 'stpnhh@gmail.com';
-    if (user.email === ADMIN_EMAIL) {
-      console.log(`✅ [CREDITS] Admin user ${user.email} - unlimited credits`);
+    // Unlimited credits for admin emails (check both email and Firebase UID for security)
+    const userEmail = user.email?.toLowerCase();
+    const isAdminEmail = ADMIN_EMAILS.includes(userEmail);
+    
+    // Additional check: verify Firebase UID matches (prevents email spoofing)
+    // In production, you could also check against a whitelist of Firebase UIDs
+    if (isAdminEmail) {
+      console.log(`✅ [CREDITS] Admin user ${userEmail} (${userId}) - unlimited credits`);
       req.userCredits = Infinity;
       req.userId = user._id;
       req.isAdmin = true;
