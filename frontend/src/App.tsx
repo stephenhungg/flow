@@ -71,6 +71,29 @@ export default function App() {
       : `${window.location.origin}${window.location.pathname}${window.location.hash}`,
   });
 
+  // Handle Stripe checkout redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const creditsStatus = params.get('credits');
+    
+    if (creditsStatus === 'success') {
+      // Show success message and refresh user data
+      const sessionId = params.get('session_id');
+      console.log('✅ [CREDITS] Purchase successful, session:', sessionId);
+      
+      // Remove query params from URL
+      window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+      
+      // Refresh page to update credit balance
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } else if (creditsStatus === 'cancelled') {
+      // Remove query params
+      window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+    }
+  }, []);
+
   // Show loading screen only on initial load for landing page
   if (isLoading && currentPage === 'landing') {
     return <LoadingScreen onComplete={() => setIsLoading(false)} minDuration={1500} />;

@@ -224,3 +224,49 @@ export async function generateSceneDescription(sceneId: string): Promise<string>
   return data.description;
 }
 
+// ============================================
+// Credits & Payment API
+// ============================================
+
+export interface CreditPackage {
+  credits: number;
+  price: number;
+  priceCents: number;
+}
+
+/**
+ * Get available credit packages
+ */
+export async function getCreditPackages(): Promise<CreditPackage[]> {
+  const response = await fetch(`${API_URL}/api/credits/packages`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch credit packages');
+  }
+  const data = await response.json();
+  return data.packages;
+}
+
+/**
+ * Create Stripe checkout session for purchasing credits
+ */
+export async function createCheckoutSession(
+  token: string,
+  packageId: number
+): Promise<{ sessionId: string; url: string }> {
+  const response = await fetch(`${API_URL}/api/credits/create-checkout`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ packageId }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to create checkout session');
+  }
+
+  return response.json();
+}
+

@@ -13,6 +13,7 @@ interface DBUser {
   email: string;
   displayName: string;
   photoURL?: string | null;
+  credits?: number;
 }
 
 interface AuthContextType {

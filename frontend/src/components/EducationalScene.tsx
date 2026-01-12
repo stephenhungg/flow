@@ -223,7 +223,7 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
           <p className="font-mono text-white/40 text-sm">
             {pipeline.progress}% complete
           </p>
-        </div>
+          </div>
       </div>
     );
   }
@@ -387,11 +387,11 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
         exit={{ opacity: 0 }}
         transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
       >
-        <FirstPersonScene
+      <FirstPersonScene 
           ref={sceneRef}
-          splatUrl={splatUrl}
+        splatUrl={splatUrl} 
           colliderMeshUrl={colliderMeshUrl}
-          onSceneReady={handleSceneReady}
+        onSceneReady={handleSceneReady}
           onScreenshotCaptured={handleScreenshotCaptured}
         />
 
@@ -413,11 +413,11 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 1, duration: 0.8, ease: 'easeOut' }}
         >
-          <SubtitleOverlay
-            subtitleLines={orchestration.subtitleLines}
-            audioCurrentTime={audioCurrentTime}
-            isPlaying={isAudioPlaying}
-          />
+      <SubtitleOverlay
+        subtitleLines={orchestration.subtitleLines}
+        audioCurrentTime={audioCurrentTime}
+        isPlaying={isAudioPlaying}
+      />
         </motion.div>
 
         <motion.div
@@ -425,43 +425,43 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 1.2, duration: 0.8, ease: 'easeOut' }}
         >
-          <EducationOverlay
-            concept={orchestration.concept}
-            learningObjectives={orchestration.learningObjectives}
-            keyFacts={orchestration.keyFacts}
-            callouts={orchestration.callouts}
-            sources={orchestration.sources}
-          />
+      <EducationOverlay
+        concept={orchestration.concept}
+        learningObjectives={orchestration.learningObjectives}
+        keyFacts={orchestration.keyFacts}
+        callouts={orchestration.callouts}
+        sources={orchestration.sources}
+      />
         </motion.div>
 
-        <div className="absolute top-6 right-6 flex gap-2 z-50">
+      <div className="absolute top-6 right-6 flex gap-2 z-50">
+        <motion.button
+          onClick={() => setShowSaveModal(true)}
+          className="glass px-4 py-2 rounded-full font-mono text-sm text-white hover:bg-white/30 transition-colors"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1.4, duration: 0.6, ease: 'easeOut' }}
+        >
+          save to library
+        </motion.button>
+        {onExit && (
           <motion.button
-            onClick={() => setShowSaveModal(true)}
+            onClick={onExit}
             className="glass px-4 py-2 rounded-full font-mono text-sm text-white hover:bg-white/30 transition-colors"
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1.4, duration: 0.6, ease: 'easeOut' }}
-          >
-            save to library
-          </motion.button>
-          {onExit && (
-            <motion.button
-              onClick={onExit}
-              className="glass px-4 py-2 rounded-full font-mono text-sm text-white hover:bg-white/30 transition-colors"
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 1.4, duration: 0.6, ease: 'easeOut' }}
-            >
-              exit
-            </motion.button>
-          )}
-        </div>
+          >
+            exit
+          </motion.button>
+        )}
+      </div>
 
-        <SaveToLibraryModal
-          isOpen={showSaveModal}
-          onClose={() => setShowSaveModal(false)}
-          concept={concept}
-          splatUrl={splatUrl}
+      <SaveToLibraryModal
+        isOpen={showSaveModal}
+        onClose={() => setShowSaveModal(false)}
+        concept={concept}
+        splatUrl={splatUrl}
           colliderMeshUrl={colliderMeshUrl}
           worldId={worldId}
           thumbnailDataUrl={thumbnailDataUrl}
@@ -484,10 +484,10 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
               url: source.url
             })),
           } : null}
-          onSaveComplete={() => {
-            setShowSaveModal(false);
-          }}
-        />
+        onSaveComplete={() => {
+          setShowSaveModal(false);
+        }}
+      />
       </motion.div>
     </AnimatePresence>
   );

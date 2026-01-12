@@ -131,6 +131,16 @@ export function GenerationLoadingScreen({
   return (
     <div className="fixed inset-0 overflow-hidden bg-black">
 
+      {/* Radial gradient breathing animation */}
+      <div 
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: 'radial-gradient(circle at center, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.05) 40%, transparent 70%)',
+          animation: 'radialBreath 4s ease-in-out infinite',
+          opacity: 0.8,
+        }}
+      />
+
       {/* Floating particles effect */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {[...Array(20)].map((_, i) => {
@@ -485,6 +495,16 @@ export function GenerationLoadingScreen({
 
       {/* CSS Keyframes */}
       <style>{`
+        @keyframes radialBreath {
+          0%, 100% {
+            opacity: 0.5;
+            transform: scale(1);
+          }
+          50% {
+            opacity: 0.8;
+            transform: scale(1.1);
+          }
+        }
         @keyframes particleRise {
           0% { transform: translateY(0) translateX(0); opacity: 0; }
           10% { opacity: 0.6; }

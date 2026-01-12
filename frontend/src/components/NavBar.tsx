@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion';
-import { Home, Library, LogIn, LogOut, User } from 'lucide-react';
+import { Home, Library, LogIn, LogOut, User, Sparkles } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useState } from 'react';
+import { BuyCreditsModal } from './BuyCreditsModal';
 
 interface NavBarProps {
   currentPage?: 'home' | 'library' | 'explore';
@@ -10,6 +11,7 @@ interface NavBarProps {
 export function NavBar({ currentPage = 'home' }: NavBarProps) {
   const { dbUser, loading, signIn, signOut } = useAuth();
   const [signingIn, setSigningIn] = useState(false);
+  const [showCreditsModal, setShowCreditsModal] = useState(false);
 
   const handleSignIn = async () => {
     setSigningIn(true);
@@ -86,6 +88,17 @@ export function NavBar({ currentPage = 'home' }: NavBarProps) {
           </div>
         ) : dbUser ? (
           <div className="flex items-center gap-2">
+            {/* Credits Balance */}
+            <motion.button
+              onClick={() => setShowCreditsModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/20 hover:bg-purple-500/30 border border-purple-400/30 font-mono text-xs text-purple-200 transition-all"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <Sparkles className="w-3 h-3" />
+              <span>{dbUser.credits || 0} credits</span>
+            </motion.button>
+
             {/* User Info */}
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10">
               {dbUser.photoURL ? (
@@ -125,6 +138,12 @@ export function NavBar({ currentPage = 'home' }: NavBarProps) {
           </motion.button>
         )}
       </div>
+
+      {/* Buy Credits Modal */}
+      <BuyCreditsModal
+        isOpen={showCreditsModal}
+        onClose={() => setShowCreditsModal(false)}
+      />
     </motion.nav>
   );
 }
