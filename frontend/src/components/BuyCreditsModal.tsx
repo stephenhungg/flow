@@ -94,7 +94,7 @@ export function BuyCreditsCard({ isOpen, onClose, anchorRef }: BuyCreditsCardPro
         className="absolute top-full right-0 mt-2 z-50"
         style={{ minWidth: '320px' }}
       >
-        <div className="glass-strong rounded-2xl p-5 shadow-2xl border border-white/10">
+        <div className="glass-strong rounded-2xl p-5 shadow-2xl">
           {/* Header */}
           <div className="flex items-center gap-2 mb-4">
             <Sparkles className="w-4 h-4 text-purple-400" />
