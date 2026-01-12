@@ -606,8 +606,8 @@ app.post('/api/credits/create-checkout', authMiddleware, async (req, res) => {
         },
       ],
       mode: 'payment',
-      success_url: `${origin}/?credits=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}/?credits=cancelled`,
+      success_url: `${origin}/#credits?credits=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/#credits?credits=cancelled`,
       client_reference_id: user._id.toString(),
       metadata: {
         userId: user._id.toString(),
