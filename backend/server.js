@@ -484,6 +484,10 @@ app.post('/api/auth/verify', async (req, res) => {
     // MongoDB driver 6.x returns document directly, not in result.value
     const updatedUser = result.value || result;
     
+    // Check if admin user
+    const userEmail = updatedUser.email?.toLowerCase();
+    const isAdmin = ADMIN_EMAILS.includes(userEmail);
+    
     res.json({
       user: {
         _id: updatedUser._id.toString(),
@@ -491,7 +495,7 @@ app.post('/api/auth/verify', async (req, res) => {
         email: updatedUser.email,
         displayName: updatedUser.displayName,
         photoURL: updatedUser.photoURL,
-        credits: updatedUser.credits || 0,
+        credits: isAdmin ? Infinity : (updatedUser.credits || 0),
       }
     });
   } catch (error) {

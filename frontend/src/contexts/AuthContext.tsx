@@ -13,7 +13,7 @@ interface DBUser {
   email: string;
   displayName: string;
   photoURL?: string | null;
-  credits?: number;
+  credits?: number | typeof Infinity;
 }
 
 interface AuthContextType {

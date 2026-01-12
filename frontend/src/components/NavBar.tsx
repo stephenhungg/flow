@@ -100,7 +100,9 @@ export function NavBar({ currentPage = 'home' }: NavBarProps) {
               whileTap={{ scale: 0.95 }}
             >
               <Sparkles className="w-3 h-3" />
-              <span>{dbUser.credits || 0} credits</span>
+              <span>
+                {dbUser.credits === Infinity ? '∞' : (dbUser.credits || 0)} credits
+              </span>
             </motion.button>
 
             {/* User Info */}

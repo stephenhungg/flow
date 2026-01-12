@@ -94,7 +94,9 @@ export function CreditsPage() {
             {dbUser && (
               <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-purple-500/20 border border-purple-400/30 font-mono text-sm text-purple-200">
                 <Sparkles className="w-4 h-4" />
-                <span>You have {dbUser.credits || 0} credits</span>
+                <span>
+                  You have {dbUser.credits === Infinity ? '∞' : (dbUser.credits || 0)} credits
+                </span>
               </div>
             )}
           </motion.div>
