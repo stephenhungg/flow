@@ -27,7 +27,7 @@ function getPageFromHash(): Page {
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState<Page>(getPageFromHash);
-  const { getIdToken, dbUser } = useAuth();
+  const { getIdToken } = useAuth();
 
   // Listen for hash changes (browser back/forward, programmatic navigation)
   useEffect(() => {

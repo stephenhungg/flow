@@ -54,7 +54,6 @@ export function LandingPage() {
 
       // Update with interim or final transcript
       setVoiceTranscript((prev) => {
-        const newTranscript = (finalTranscript || interimTranscript).trim();
         return finalTranscript ? prev + finalTranscript : prev + interimTranscript;
       });
     };

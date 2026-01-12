@@ -229,30 +229,7 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, s
     }
   }, [pipeline.stage, pipeline.splatUrl, pipeline.colliderMeshUrl, pipeline.worldId, concept, orchestration]);
 
-  // Auto-save after screenshot is captured
-  useEffect(() => {
-    if (mode === 'in_scene' && thumbnailDataUrl && pipeline.splatUrl && !savedSceneId) {
-      // Small delay to ensure everything is settled
-      const timer = setTimeout(() => {
-        autoSaveToLibrary();
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [mode, thumbnailDataUrl, pipeline.splatUrl, savedSceneId, autoSaveToLibrary]);
-
-  // Handle scene ready
-  const handleSceneReady = useCallback(() => {
-    console.log('✅ [SCENE] 3D scene ready');
-    setMode('in_scene');
-  }, []);
-
-  // Handle screenshot captured
-  const handleScreenshotCaptured = useCallback((dataUrl: string) => {
-    console.log('📸 [SCREENSHOT] Captured for thumbnail');
-    setThumbnailDataUrl(dataUrl);
-  }, []);
-
-  // Auto-save to library when generation completes
+  // Auto-save to library when generation completes (defined before useEffect that uses it)
   const autoSaveToLibrary = useCallback(async () => {
     // Don't auto-save if this is already a saved scene
     if (savedSceneId) {
@@ -315,6 +292,29 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, s
       // Don't show error to user - auto-save is best-effort
     }
   }, [pipeline.splatUrl, concept, colliderMeshUrl, worldId, thumbnailDataUrl, orchestration, savedSceneId, getIdToken]);
+
+  // Auto-save after screenshot is captured
+  useEffect(() => {
+    if (mode === 'in_scene' && thumbnailDataUrl && pipeline.splatUrl && !savedSceneId) {
+      // Small delay to ensure everything is settled
+      const timer = setTimeout(() => {
+        autoSaveToLibrary();
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [mode, thumbnailDataUrl, pipeline.splatUrl, savedSceneId, autoSaveToLibrary]);
+
+  // Handle scene ready
+  const handleSceneReady = useCallback(() => {
+    console.log('✅ [SCENE] 3D scene ready');
+    setMode('in_scene');
+  }, []);
+
+  // Handle screenshot captured
+  const handleScreenshotCaptured = useCallback((dataUrl: string) => {
+    console.log('📸 [SCREENSHOT] Captured for thumbnail');
+    setThumbnailDataUrl(dataUrl);
+  }, []);
 
   // Handle loading complete from GenerationLoadingScreen
   const handleLoadingComplete = useCallback((completedSplatUrl: string) => {
