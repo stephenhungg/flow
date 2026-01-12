@@ -902,6 +902,73 @@ app.get('/api/scenes/:id', async (req, res) => {
 });
 
 /**
+ * POST /api/scenes/:id/generate-description
+ * Generate AI description for a scene using Gemini
+ */
+app.post('/api/scenes/:id/generate-description', async (req, res) => {
+  try {
+    const sceneId = req.params.id;
+    
+    if (!ObjectId.isValid(sceneId)) {
+      return res.status(400).json({ error: 'Invalid scene ID' });
+    }
+
+    const scenesCollection = getScenesCollection();
+    const scene = await scenesCollection.findOne({ _id: new ObjectId(sceneId) });
+
+    if (!scene) {
+      return res.status(404).json({ error: 'Scene not found' });
+    }
+
+    // If description already exists, return it
+    if (scene.description && scene.description.trim().length > 0) {
+      return res.json({ description: scene.description });
+    }
+
+    // Generate description using Gemini
+    const GEMINI_API_KEY = process.env.VITE_GEMINI_API_KEY;
+    if (!GEMINI_API_KEY) {
+      return res.status(500).json({ error: 'Gemini API key not configured' });
+    }
+
+    const prompt = `Generate a concise, engaging description (2-3 sentences) for a 3D educational scene about: "${scene.concept || scene.title}". 
+The description should be informative, accessible, and suitable for a learning environment.`;
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }]
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ [GEMINI] Description generation error:', response.status, errorText);
+      return res.status(response.status).json({ error: 'Failed to generate description' });
+    }
+
+    const data = await response.json();
+    const description = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+
+    if (!description) {
+      return res.status(500).json({ error: 'No description generated' });
+    }
+
+    // Update scene with generated description
+    await scenesCollection.updateOne(
+      { _id: scene._id },
+      { $set: { description, updatedAt: new Date() } }
+    );
+
+    res.json({ description });
+  } catch (error) {
+    console.error('❌ [SCENES] Generate description error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/proxy/splat
  * Proxy splat files from Vultr to avoid CORS issues
  */
