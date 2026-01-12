@@ -1044,6 +1044,36 @@ app.post('/api/scenes/from-url', authMiddleware, async (req, res) => {
     let vultrSplatUrl = externalSplatUrl; // Use Marble CDN URL directly
     let vultrColliderUrl = externalColliderUrl || null;
     let splatKey = null;
+    let sceneId = null;
+    
+    // Create scene document first to get ID (needed for both paths)
+    const scenesCollection = getScenesCollection();
+    const sceneData = {
+      title,
+      description: description || '',
+      concept,
+      creatorId: user._id,
+      creatorName: user.displayName,
+      tags: tags ? (typeof tags === 'string' ? tags.split(',') : tags) : [],
+      isPublic: isPublic === 'true' || isPublic === true || isPublic === undefined,
+      viewCount: 0,
+      worldId: worldId || null,
+      hasCollider: !!vultrColliderUrl,
+      thumbnailUrl: null,
+      orchestration: orchestration ? {
+        learningObjectives: orchestration.learningObjectives || [],
+        keyFacts: orchestration.keyFacts || [],
+        narrationScript: orchestration.narrationScript || '',
+        subtitleLines: orchestration.subtitleLines || [],
+        callouts: orchestration.callouts || [],
+        sources: orchestration.sources || [],
+      } : null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const insertResult = await scenesCollection.insertOne(sceneData);
+    sceneId = insertResult.insertedId;
     
     if (!isMarbleCdn) {
       // Only download/upload if NOT from Marble CDN (for backwards compatibility)
@@ -1073,35 +1103,6 @@ app.post('/api/scenes/from-url', authMiddleware, async (req, res) => {
         }
       }
 
-      // Create scene document first to get ID
-      const scenesCollection = getScenesCollection();
-      const sceneData = {
-        title,
-        description: description || '',
-        concept,
-        creatorId: user._id,
-        creatorName: user.displayName,
-        tags: tags ? (typeof tags === 'string' ? tags.split(',') : tags) : [],
-        isPublic: isPublic === 'true' || isPublic === true || isPublic === undefined,
-        viewCount: 0,
-        worldId: worldId || null,
-        hasCollider: !!colliderBuffer,
-        thumbnailUrl: null,
-        orchestration: orchestration ? {
-          learningObjectives: orchestration.learningObjectives || [],
-          keyFacts: orchestration.keyFacts || [],
-          narrationScript: orchestration.narrationScript || '',
-          subtitleLines: orchestration.subtitleLines || [],
-          callouts: orchestration.callouts || [],
-          sources: orchestration.sources || [],
-        } : null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      const insertResult = await scenesCollection.insertOne(sceneData);
-      const sceneId = insertResult.insertedId;
-
       // Upload splat file to Vultr Object Storage
       splatKey = generateSplatKey(user._id.toString(), sceneId.toString());
       console.log(`📤 [SCENES] Uploading splat to Vultr: ${splatKey}`);
@@ -1117,35 +1118,6 @@ app.post('/api/scenes/from-url', authMiddleware, async (req, res) => {
       }
     } else {
       console.log('✅ [SCENES] Using Marble CDN URL directly (no download/upload needed):', externalSplatUrl);
-      
-      // Create scene document with Marble CDN URL
-      const scenesCollection = getScenesCollection();
-      const sceneData = {
-        title,
-        description: description || '',
-        concept,
-        creatorId: user._id,
-        creatorName: user.displayName,
-        tags: tags ? (typeof tags === 'string' ? tags.split(',') : tags) : [],
-        isPublic: isPublic === 'true' || isPublic === true || isPublic === undefined,
-        viewCount: 0,
-        worldId: worldId || null,
-        hasCollider: !!vultrColliderUrl,
-        thumbnailUrl: null,
-        orchestration: orchestration ? {
-          learningObjectives: orchestration.learningObjectives || [],
-          keyFacts: orchestration.keyFacts || [],
-          narrationScript: orchestration.narrationScript || '',
-          subtitleLines: orchestration.subtitleLines || [],
-          callouts: orchestration.callouts || [],
-          sources: orchestration.sources || [],
-        } : null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      const insertResult = await scenesCollection.insertOne(sceneData);
-      const sceneId = insertResult.insertedId;
     }
 
     // Upload thumbnail if provided (as actual image file, not base64 in DB)
