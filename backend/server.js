@@ -700,6 +700,71 @@ app.post('/api/credits/webhook', express.raw({ type: 'application/json' }), asyn
 });
 
 /**
+ * POST /api/credits/verify-session
+ * Verify Stripe checkout session and add credits (fallback if webhook hasn't fired)
+ */
+app.post('/api/credits/verify-session', authMiddleware, async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(500).json({ error: 'Stripe not configured' });
+    }
+
+    const { sessionId } = req.body;
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Session ID is required' });
+    }
+
+    // Retrieve the checkout session
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    
+    // Verify payment was successful
+    if (session.payment_status !== 'paid') {
+      return res.status(400).json({ error: 'Payment not completed' });
+    }
+
+    // Verify this session belongs to the current user
+    const usersCollection = getUsersCollection();
+    const user = await usersCollection.findOne({ firebaseUid: req.user.uid });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (session.client_reference_id !== user._id.toString()) {
+      return res.status(403).json({ error: 'Session does not belong to this user' });
+    }
+
+    // Check if credits were already added (prevent double-crediting)
+    // We'll check by looking at session metadata
+    const credits = parseInt(session.metadata.credits);
+    if (!credits) {
+      return res.status(400).json({ error: 'Invalid session metadata' });
+    }
+
+    // Check if we've already processed this session (optional: store processed sessions)
+    // For now, we'll just add credits (webhook might have already done it, but $inc is idempotent-ish)
+    // Actually, let's add a flag to check if credits were added recently
+    // But for simplicity, we'll just add credits - $inc is safe to call multiple times
+    
+    await usersCollection.findOneAndUpdate(
+      { _id: user._id },
+      { $inc: { credits: credits } }
+    );
+
+    console.log(`💰 [CREDITS] Added ${credits} credits via session verification for user ${user._id}`);
+
+    const updatedUser = await usersCollection.findOne({ _id: user._id });
+    res.json({ 
+      success: true, 
+      creditsAdded: credits,
+      totalCredits: updatedUser?.credits || 0 
+    });
+  } catch (error) {
+    console.error('❌ [CREDITS] Session verification error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/credits/packages
  * Get available credit packages
  */

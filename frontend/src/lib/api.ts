@@ -270,3 +270,27 @@ export async function createCheckoutSession(
   return response.json();
 }
 
+/**
+ * Verify Stripe checkout session and add credits (fallback if webhook hasn't fired)
+ */
+export async function verifyCheckoutSession(
+  token: string,
+  sessionId: string
+): Promise<{ success: boolean; creditsAdded: number; totalCredits: number }> {
+  const response = await fetch(`${API_URL}/api/credits/verify-session`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ sessionId }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to verify session');
+  }
+
+  return response.json();
+}
+

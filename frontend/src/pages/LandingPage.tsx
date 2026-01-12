@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, Type, ArrowRight, ChevronDown, Sparkles } from 'lucide-react';
 import { ShaderBackground } from '../components/ShaderBackground';
@@ -15,40 +15,107 @@ type QualityMode = 'quick' | 'standard' | 'premium';
 export function LandingPage() {
   const [inputMode, setInputMode] = useState<InputMode>('voice');
   const [isListening, setIsListening] = useState(false);
-  const [typedText, setTypedText] = useState('');
+  const [voiceTranscript, setVoiceTranscript] = useState('');
   const [textInput, setTextInput] = useState('');
-  const fullText = "ancient rome";
-  const [showFullText, setShowFullText] = useState(false);
   const [isZooming, setIsZooming] = useState(false);
   const [showOverlay, setShowOverlay] = useState(false);
+  const recognitionRef = useRef<any>(null);
 
   // Advanced options
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [qualityMode, setQualityMode] = useState<QualityMode>('standard');
 
+  // Initialize Speech Recognition
   useEffect(() => {
-    if (isListening && !showFullText) {
-      let i = 0;
-      const typingInterval = setInterval(() => {
-        setTypedText(fullText.substring(0, i));
-        i++;
-        if (i > fullText.length) {
-          clearInterval(typingInterval);
-          setShowFullText(true);
-        }
-      }, 100);
-      return () => clearInterval(typingInterval);
-    } else if (!isListening) {
-      setTypedText('');
-      setShowFullText(false);
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      console.warn('Speech recognition not supported in this browser');
+      return;
     }
-  }, [isListening, showFullText]);
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event: any) => {
+      let interimTranscript = '';
+      let finalTranscript = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript + ' ';
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+
+      // Update with interim or final transcript
+      setVoiceTranscript((prev) => {
+        const newTranscript = (finalTranscript || interimTranscript).trim();
+        return finalTranscript ? prev + finalTranscript : prev + interimTranscript;
+      });
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error('Speech recognition error:', event.error);
+      if (event.error === 'no-speech') {
+        // User hasn't spoken yet, this is normal
+        return;
+      }
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      // If we're still supposed to be listening, restart
+      if (isListening) {
+        try {
+          recognition.start();
+        } catch (e) {
+          console.error('Error restarting recognition:', e);
+        }
+      }
+    };
+
+    recognitionRef.current = recognition;
+
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
+  }, []);
+
+  // Control speech recognition based on listening state
+  useEffect(() => {
+    if (!recognitionRef.current) return;
+
+    if (isListening) {
+      setVoiceTranscript('');
+      try {
+        recognitionRef.current.start();
+      } catch (e) {
+        console.error('Error starting recognition:', e);
+      }
+    } else {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {
+        console.error('Error stopping recognition:', e);
+      }
+    }
+  }, [isListening]);
 
   const handleMicClick = () => {
-    if (isListening && showFullText) {
-      // User clicked mic again after text is complete - submit
-      const query = fullText.trim();
+    if (isListening && voiceTranscript.trim()) {
+      // User clicked mic again after speaking - submit
+      const query = voiceTranscript.trim();
       console.log('Voice submitted:', query);
+
+      // Stop listening
+      setIsListening(false);
 
       // Stage 1: Start zoom animation (t=0ms)
       setIsZooming(true);
@@ -73,6 +140,7 @@ export function LandingPage() {
         window.location.hash = `#explore?${params.toString()}`;
       }, 2300);
     } else {
+      // Toggle listening
       setIsListening(!isListening);
     }
   };
@@ -113,8 +181,7 @@ export function LandingPage() {
     console.log('Mode switched to:', mode);
     setInputMode(mode);
     setIsListening(false);
-    setTypedText('');
-    setShowFullText(false);
+    setVoiceTranscript('');
     setTextInput('');
   };
 
@@ -257,7 +324,7 @@ export function LandingPage() {
               <div className="glass rounded-full px-8 py-4 w-[400px] md:w-[480px] h-[3.5rem] flex items-center justify-center">
                 {isListening ? (
                   <span className="font-mono text-base text-white/90 text-glow truncate w-full text-center px-4">
-                    <span className="text-white">{typedText}</span>
+                    <span className="text-white">{voiceTranscript || ''}</span>
                     <motion.span
                       className="inline-block w-0.5 h-5 bg-white ml-1 align-middle"
                       animate={{ opacity: [0, 1, 0] }}

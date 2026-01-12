@@ -5,6 +5,8 @@ import { ExplorePage } from './pages/ExplorePage';
 import { LibraryPage } from './pages/LibraryPage';
 import { CreditsPage } from './pages/CreditsPage';
 import { useMetaTags } from './hooks/useMetaTags';
+import { useAuth } from './contexts/AuthContext';
+import { verifyCheckoutSession } from './lib/api';
 
 type Page = 'landing' | 'explore' | 'library' | 'credits';
 
@@ -25,6 +27,7 @@ function getPageFromHash(): Page {
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState<Page>(getPageFromHash);
+  const { getIdToken, dbUser } = useAuth();
 
   // Listen for hash changes (browser back/forward, programmatic navigation)
   useEffect(() => {
@@ -88,7 +91,7 @@ export default function App() {
     const creditsStatus = params.get('credits');
     
     if (creditsStatus === 'success') {
-      // Show success message and refresh user data
+      // Show success message and verify session (fallback if webhook hasn't fired)
       const sessionId = params.get('session_id');
       console.log('✅ [CREDITS] Purchase successful, session:', sessionId);
       
@@ -96,16 +99,44 @@ export default function App() {
       const hash = window.location.hash.split('?')[0];
       window.history.replaceState({}, '', window.location.pathname + hash);
       
-      // Refresh page to update credit balance
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
+      // Verify session and add credits (fallback if webhook hasn't fired)
+      if (sessionId) {
+        getIdToken().then(token => {
+          if (token) {
+            verifyCheckoutSession(token, sessionId)
+              .then(result => {
+                console.log('✅ [CREDITS] Session verified, credits added:', result.creditsAdded);
+                // Refresh page to update credit balance
+                setTimeout(() => {
+                  window.location.reload();
+                }, 1000);
+              })
+              .catch(err => {
+                console.error('❌ [CREDITS] Failed to verify session:', err);
+                // Still refresh page (webhook might have added credits)
+                setTimeout(() => {
+                  window.location.reload();
+                }, 1000);
+              });
+          } else {
+            // No token, just refresh
+            setTimeout(() => {
+              window.location.reload();
+            }, 1000);
+          }
+        });
+      } else {
+        // No session ID, just refresh
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      }
     } else if (creditsStatus === 'cancelled') {
       // Remove query params but keep #credits hash
       const hash = window.location.hash.split('?')[0];
       window.history.replaceState({}, '', window.location.pathname + hash);
     }
-  }, []);
+  }, [getIdToken]);
 
   // Show loading screen only on initial load for landing page
   if (isLoading && currentPage === 'landing') {

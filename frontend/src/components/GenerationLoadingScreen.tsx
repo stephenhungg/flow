@@ -187,225 +187,204 @@ export function GenerationLoadingScreen({
       />
 
       {/* Main content */}
-      <div className="relative z-10 h-full flex flex-col items-center justify-center px-6">
-        
-        {/* Concept display */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-          className="text-center mb-12"
-        >
-          <motion.p 
-            className="text-white/30 text-xs uppercase tracking-[0.3em] mb-4 font-mono"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.3 }}
-          >
-            constructing reality
-          </motion.p>
-          <h1 
-            className="text-4xl md:text-5xl lg:text-6xl font-light text-white tracking-tight font-mono"
-          >
-            {glitchText}
-          </h1>
-        </motion.div>
-
-        {/* Progress section */}
-        <motion.div
-          initial={{ opacity: 0, scaleX: 0 }}
-          animate={{ opacity: 1, scaleX: 1 }}
-          transition={{ delay: 0.5, duration: 0.8 }}
-          className="w-full max-w-md mb-6"
-        >
-          {/* Progress bar */}
-          <div className="h-[2px] bg-white/10 rounded-full overflow-hidden">
-            <motion.div
-              className="h-full rounded-full"
-              style={{ 
-                background: '#3b82f6',
-                boxShadow: '0 0 20px rgba(59, 130, 246, 0.5)',
-              }}
-              initial={{ width: '0%' }}
-              animate={{ width: `${progress}%` }}
-              transition={{ duration: 0.3 }}
-            />
-          </div>
-          <div className="flex justify-between items-center mt-3 font-mono text-xs">
-            <div className="flex items-center gap-3">
-              <span className="text-white/40">{Math.round(progress)}%</span>
-              <span className="text-white/30">•</span>
-              <span className="text-white/40">{getEstimatedTime()} remaining</span>
-            </div>
-            <span className="text-white/40">{message || 'initializing...'}</span>
-          </div>
-          
-          {/* Stay on page warning */}
-          <motion.div
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1 }}
-            className="mt-3 text-center"
-          >
-            <p className="text-yellow-400/60 text-[10px] font-mono">
-              ⚠️ Please stay on this page while generating
-            </p>
-          </motion.div>
-        </motion.div>
-
-        {/* Stage indicators */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.7 }}
-          className="flex gap-3 mb-10"
-        >
-          {['parse', 'render', 'build', 'load'].map((label, i) => (
-            <div key={label} className="flex items-center gap-2">
-              <div
-                className="w-6 h-1 rounded-full transition-all duration-300"
-                style={{
-                  background: i <= stageIndex ? '#3b82f6' : 'rgba(255,255,255,0.1)',
-                  boxShadow: i === stageIndex ? '0 0 10px rgba(59, 130, 246, 0.5)' : 'none',
-                }}
-              />
-              <span 
-                className="font-mono text-[10px] uppercase tracking-wider transition-colors duration-300"
-                style={{ color: i <= stageIndex ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.2)' }}
+      <div className="relative z-10 h-full flex items-center px-6 lg:px-14">
+        <div className="w-full max-w-6xl mx-auto">
+          <div className="grid lg:grid-cols-[1.1fr_0.9fr] gap-10 items-start">
+            {/* Left column: text + progress + terminal */}
+            <div className="flex flex-col gap-8">
+              {/* Concept display */}
+              <motion.div
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
+                className="text-left space-y-3"
               >
-                {label}
-              </span>
-            </div>
-          ))}
-        </motion.div>
-
-        {/* Generated Image Preview */}
-        <AnimatePresence>
-          {generatedImage && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-              className="mb-8"
-            >
-              <div className="relative">
-                {/* Label */}
-                <motion.div 
-                  className="absolute -top-6 left-1/2 -translate-x-1/2 z-10"
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
+                <motion.p 
+                  className="text-white/30 text-xs uppercase tracking-[0.3em] font-mono"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
                   transition={{ delay: 0.3 }}
                 >
-                  <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-blue-400/80 bg-black/50 px-3 py-1 rounded-full backdrop-blur-sm border border-blue-500/20">
-                    ai generated scene
-                  </span>
-                </motion.div>
-                
-                {/* Image container */}
-                <div 
-                  className="relative rounded-xl overflow-hidden"
-                  style={{
-                    boxShadow: '0 20px 60px rgba(59, 130, 246, 0.15), 0 0 40px rgba(59, 130, 246, 0.1)',
-                    border: '1px solid rgba(59, 130, 246, 0.2)',
-                  }}
+                  constructing reality
+                </motion.p>
+                <h1 
+                  className="text-4xl md:text-5xl lg:text-6xl font-light text-white tracking-tight font-mono leading-tight"
                 >
-                  <img
-                    src={`data:${generatedImageMime || 'image/png'};base64,${generatedImage}`}
-                    alt="Generated scene"
-                    className="w-[320px] h-[180px] md:w-[400px] md:h-[225px] object-cover"
-                    style={{
-                      filter: stageIndex >= 2 ? 'brightness(0.7) saturate(1.2)' : 'none',
-                    }}
-                  />
-                  
-                  {/* Processing overlay when creating world */}
-                  {stageIndex >= 2 && stageIndex < 4 && (
-                    <motion.div 
-                      className="absolute inset-0 flex items-center justify-center"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                    >
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/30" />
-                      <motion.div 
-                        className="relative z-10 flex flex-col items-center gap-2"
-                        animate={{ y: [0, -3, 0] }}
-                        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                      >
-                        <div className="w-10 h-10 rounded-full border-2 border-blue-400/50 border-t-blue-400 animate-spin" />
-                        <span className="font-mono text-xs text-white/80">building 3d world...</span>
-                      </motion.div>
-                    </motion.div>
-                  )}
-                  
-                  {/* Scan line effect */}
+                  {glitchText}
+                </h1>
+                <p className="text-white/50 font-mono text-sm max-w-xl">
+                  Sit tight while we render your immersive world. We’ll keep you posted in real time.
+                </p>
+              </motion.div>
+
+              {/* Progress section */}
+              <motion.div
+                initial={{ opacity: 0, scaleX: 0 }}
+                animate={{ opacity: 1, scaleX: 1 }}
+                transition={{ delay: 0.4, duration: 0.8 }}
+                className="w-full"
+              >
+                {/* Progress bar */}
+                <div className="h-[3px] bg-white/10 rounded-full overflow-hidden">
                   <motion.div
-                    className="absolute inset-0 pointer-events-none"
-                    style={{
-                      background: 'linear-gradient(transparent 50%, rgba(0, 0, 0, 0.1) 50%)',
-                      backgroundSize: '100% 4px',
+                    className="h-full rounded-full"
+                    style={{ 
+                      background: 'linear-gradient(90deg, #60a5fa, #c084fc)',
+                      boxShadow: '0 0 20px rgba(96,165,250,0.5)',
                     }}
-                    animate={{ opacity: [0.3, 0.5, 0.3] }}
-                    transition={{ duration: 2, repeat: Infinity }}
+                    initial={{ width: '0%' }}
+                    animate={{ width: `${progress}%` }}
+                    transition={{ duration: 0.3 }}
                   />
                 </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                <div className="flex flex-wrap justify-between items-center mt-3 font-mono text-xs gap-2">
+                  <div className="flex items-center gap-3">
+                    <span className="text-white/40">{Math.round(progress)}%</span>
+                    <span className="text-white/30">•</span>
+                    <span className="text-white/40">{getEstimatedTime()} remaining</span>
+                  </div>
+                  <span className="text-white/60">{message || 'initializing...'}</span>
+                </div>
+                
+                {/* Stay on page warning */}
+                <motion.div
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.8 }}
+                  className="mt-3 text-left"
+                >
+                  <p className="text-yellow-400/70 text-[11px] font-mono">
+                    ⚠️ Stay on this page while we generate your world.
+                  </p>
+                </motion.div>
+              </motion.div>
 
-        {/* Terminal */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1 }}
-          className="w-full max-w-2xl"
-        >
-          <div
-            className="rounded-xl p-5 font-mono text-xs backdrop-blur-md"
-            style={{
-              background: 'rgba(0, 0, 0, 0.6)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
-            }}
-          >
-            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-white/10">
-              <div className="w-2.5 h-2.5 rounded-full bg-red-500/70" />
-              <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/70" />
-              <div className="w-2.5 h-2.5 rounded-full bg-green-500/70" />
-              <span className="text-white/40 ml-2 text-[11px]">generation_pipeline.log</span>
-              <div className="ml-auto flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                <span className="text-white/30 text-[10px]">live</span>
-              </div>
-            </div>
-            <div className="space-y-1.5 h-32 overflow-hidden">
-              <AnimatePresence mode="popLayout">
-                {terminalLines.map((line, i) => (
-                  <motion.div
-                    key={`${line}-${i}`}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0 }}
-                    className="flex items-start gap-2 leading-relaxed"
-                  >
-                    <span className="text-blue-400/80">›</span>
-                    <span className="text-white/70 flex-1">{line}</span>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-              <div className="flex items-center gap-1 mt-1">
-                <span className="text-white/40">›</span>
-                <span
-                  className="inline-block w-1.5 h-3.5 bg-blue-400/90"
+              {/* Terminal */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.6 }}
+                className="w-full"
+              >
+                <div
+                  className="rounded-xl p-5 font-mono text-xs backdrop-blur-md"
                   style={{
-                    animation: 'cursorBlink 1s step-end infinite',
+                    background: 'rgba(0, 0, 0, 0.6)',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
                   }}
-                />
-              </div>
+                >
+                  <div className="flex items-center gap-2 mb-4 pb-3 border-b border-white/10">
+                    <div className="w-2.5 h-2.5 rounded-full bg-red-500/70" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/70" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-green-500/70" />
+                    <span className="text-white/40 ml-2 text-[11px]">generation_pipeline.log</span>
+                    <div className="ml-auto flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                      <span className="text-white/30 text-[10px]">live</span>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5 h-36 overflow-hidden">
+                    <AnimatePresence mode="popLayout">
+                      {terminalLines.map((line, i) => (
+                        <motion.div
+                          key={`${line}-${i}`}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0 }}
+                          className="flex items-start gap-2 leading-relaxed"
+                        >
+                          <span className="text-blue-400/80">›</span>
+                          <span className="text-white/70 flex-1">{line}</span>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                    <div className="flex items-center gap-1 mt-1">
+                      <span className="text-white/40">›</span>
+                      <span
+                        className="inline-block w-1.5 h-3.5 bg-blue-400/90"
+                        style={{
+                          animation: 'cursorBlink 1s step-end infinite',
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+
+            {/* Right column: preview */}
+            <div className="w-full">
+              <AnimatePresence>
+                {generatedImage ? (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.98 }}
+                    transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                    className="relative"
+                  >
+                    <motion.div 
+                      className="absolute -top-6 left-1/2 -translate-x-1/2 z-10"
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.25 }}
+                    >
+                      <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-blue-200/80 bg-black/60 px-3 py-1 rounded-full backdrop-blur-sm border border-blue-500/20">
+                        ai generated scene
+                      </span>
+                    </motion.div>
+
+                    <div 
+                      className="relative rounded-2xl overflow-hidden"
+                      style={{
+                        boxShadow: '0 30px 90px rgba(59, 130, 246, 0.15), 0 0 60px rgba(59, 130, 246, 0.12)',
+                        border: '1px solid rgba(59, 130, 246, 0.25)',
+                      }}
+                    >
+                      <img
+                        src={`data:${generatedImageMime || 'image/png'};base64,${generatedImage}`}
+                        alt="Generated scene"
+                        className="w-full aspect-video object-cover"
+                        style={{
+                          filter: stageIndex >= 2 ? 'brightness(0.78) saturate(1.15)' : 'none',
+                        }}
+                      />
+                      
+                      {/* Processing overlay when creating world */}
+                      {stageIndex >= 2 && stageIndex < 4 && (
+                        <motion.div 
+                          className="absolute inset-0 flex items-center justify-center"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                        >
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/40 to-transparent" />
+                          <motion.div 
+                            className="relative z-10 flex flex-col items-center gap-3"
+                            animate={{ y: [0, -4, 0] }}
+                            transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+                          >
+                            <div className="w-10 h-10 rounded-full border-2 border-blue-400/50 border-t-blue-400 animate-spin" />
+                            <span className="font-mono text-xs text-white/85 tracking-wide">building 3d world...</span>
+                          </motion.div>
+                        </motion.div>
+                      )}
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.98, y: 8 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                    className="rounded-2xl border border-white/10 bg-white/[0.02] backdrop-blur-md h-full min-h-[320px] flex items-center justify-center text-white/40 font-mono text-xs"
+                  >
+                    generating preview...
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
-        </motion.div>
+        </div>
       </div>
 
       {/* Completion overlay */}

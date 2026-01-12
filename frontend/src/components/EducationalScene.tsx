@@ -143,7 +143,7 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
     
     return () => {
       cancelled = true;
-      pipelineStartedRef.current = false; // Reset on cleanup
+      // Do not reset pipelineStartedRef to avoid double-run in React StrictMode dev
     };
   }, [concept, savedSplatUrl, savedOrchestration, customImageData, qualityMode]);
 
