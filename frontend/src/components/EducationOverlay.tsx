@@ -15,7 +15,6 @@ export function EducationOverlay({
   concept,
   learningObjectives,
   keyFacts,
-  callouts,
   sources
 }: EducationOverlayProps) {
   const [showSources, setShowSources] = useState(false);
