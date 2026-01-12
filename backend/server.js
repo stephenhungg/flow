@@ -84,8 +84,14 @@ const rateLimitStore = new Map();
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const RATE_LIMIT_MAX_REQUESTS = 2; // Max 2 generations per hour per IP
 
-// Simple rate limiting middleware
+// Simple rate limiting middleware (bypasses admin users)
 function rateLimitMiddleware(req, res, next) {
+  // Skip rate limiting for admin users
+  if (req.isAdmin) {
+    console.log('✅ [RATE_LIMIT] Admin user - bypassing rate limit');
+    return next();
+  }
+  
   const ip = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for']?.split(',')[0] || 'unknown';
   
   // Clean up old entries (older than 1 hour)
