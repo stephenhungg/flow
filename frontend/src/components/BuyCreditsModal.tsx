@@ -1,19 +1,20 @@
 /**
- * Buy Credits Modal - Stripe checkout for purchasing credits
+ * Buy Credits Card - Expanded card dropdown for purchasing credits
  */
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Sparkles } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { Sparkles } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getCreditPackages, createCheckoutSession, type CreditPackage } from '../lib/api';
 
-interface BuyCreditsModalProps {
+interface BuyCreditsCardProps {
   isOpen: boolean;
   onClose: () => void;
+  anchorRef?: React.RefObject<HTMLElement | null>;
 }
 
-export function BuyCreditsModal({ isOpen, onClose }: BuyCreditsModalProps) {
+export function BuyCreditsCard({ isOpen, onClose, anchorRef }: BuyCreditsCardProps) {
   const { getIdToken } = useAuth();
   const [packages, setPackages] = useState<CreditPackage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,42 +60,50 @@ export function BuyCreditsModal({ isOpen, onClose }: BuyCreditsModalProps) {
     }
   };
 
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        cardRef.current &&
+        !cardRef.current.contains(event.target as Node) &&
+        anchorRef?.current &&
+        !anchorRef.current.contains(event.target as Node)
+      ) {
+        onClose();
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen, onClose, anchorRef]);
+
   if (!isOpen) return null;
 
   return (
     <AnimatePresence>
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
+        ref={cardRef}
+        initial={{ opacity: 0, y: -10, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -10, scale: 0.95 }}
+        transition={{ duration: 0.2 }}
+        className="absolute top-full right-0 mt-2 z-50"
+        style={{ minWidth: '320px' }}
       >
-        <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.9, opacity: 0 }}
-          onClick={(e) => e.stopPropagation()}
-          className="glass-strong rounded-2xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto"
-        >
+        <div className="glass-strong rounded-2xl p-5 shadow-2xl border border-white/10">
           {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <Sparkles className="w-5 h-5 text-purple-400" />
-              <h2 className="font-mono text-xl text-white">Buy Credits</h2>
-            </div>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-full hover:bg-white/10 transition-colors"
-            >
-              <X className="w-5 h-5 text-white/70" />
-            </button>
+          <div className="flex items-center gap-2 mb-4">
+            <Sparkles className="w-4 h-4 text-purple-400" />
+            <h2 className="font-mono text-lg text-white">Buy Credits</h2>
           </div>
 
           {/* Info */}
-          <p className="text-white/60 text-sm mb-6 font-mono">
-            Each 3D generation costs <span className="text-purple-400 font-semibold">1 credit</span>. 
-            Purchase credits to create unlimited scenes.
+          <p className="text-white/50 text-xs mb-4 font-mono">
+            Each generation costs <span className="text-purple-400 font-semibold">1 credit</span>
           </p>
 
           {/* Error */}
@@ -106,13 +115,13 @@ export function BuyCreditsModal({ isOpen, onClose }: BuyCreditsModalProps) {
 
           {/* Packages */}
           {loading ? (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-20 bg-white/5 rounded-lg animate-pulse" />
+                <div key={i} className="h-16 bg-white/5 rounded-lg animate-pulse" />
               ))}
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {packages.map((pkg) => {
                 const perCredit = (pkg.price / pkg.credits).toFixed(2);
                 const isPurchasing = purchasing === pkg.credits;
@@ -122,33 +131,33 @@ export function BuyCreditsModal({ isOpen, onClose }: BuyCreditsModalProps) {
                     key={pkg.credits}
                     onClick={() => handlePurchase(pkg)}
                     disabled={isPurchasing}
-                    className="w-full p-4 rounded-lg glass border border-white/10 hover:border-purple-400/50 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
-                    whileHover={!isPurchasing ? { scale: 1.02 } : {}}
-                    whileTap={!isPurchasing ? { scale: 0.98 } : {}}
+                    className="w-full p-3 rounded-lg glass border border-white/10 hover:border-purple-400/50 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                    whileHover={!isPurchasing ? { scale: 1.01 } : {}}
+                    whileTap={!isPurchasing ? { scale: 0.99 } : {}}
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-mono text-lg text-white font-semibold">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="font-mono text-sm text-white font-semibold">
                             {pkg.credits} Credits
                           </span>
                           {pkg.credits >= 20 && (
-                            <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-xs font-mono">
-                              Best Value
+                            <span className="px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-mono">
+                              Best
                             </span>
                           )}
                         </div>
-                        <p className="text-white/50 text-xs font-mono">
-                          ${perCredit} per generation
+                        <p className="text-white/40 text-[10px] font-mono">
+                          ${perCredit}/gen
                         </p>
                       </div>
                       <div className="text-right">
-                        <div className="font-mono text-xl text-white font-semibold">
+                        <div className="font-mono text-base text-white font-semibold">
                           ${pkg.price.toFixed(2)}
                         </div>
                         {isPurchasing && (
-                          <div className="text-xs text-purple-400 font-mono mt-1">
-                            Redirecting...
+                          <div className="text-[10px] text-purple-400 font-mono mt-0.5">
+                            ...
                           </div>
                         )}
                       </div>
@@ -160,12 +169,12 @@ export function BuyCreditsModal({ isOpen, onClose }: BuyCreditsModalProps) {
           )}
 
           {/* Footer */}
-          <div className="mt-6 pt-4 border-t border-white/10">
-            <p className="text-white/40 text-xs font-mono text-center">
-              Powered by Stripe • Secure payment processing
+          <div className="mt-4 pt-3 border-t border-white/10">
+            <p className="text-white/30 text-[10px] font-mono text-center">
+              Secure payment via Stripe
             </p>
           </div>
-        </motion.div>
+        </div>
       </motion.div>
     </AnimatePresence>
   );
