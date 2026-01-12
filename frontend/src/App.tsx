@@ -92,16 +92,18 @@ export default function App() {
       const sessionId = params.get('session_id');
       console.log('✅ [CREDITS] Purchase successful, session:', sessionId);
       
-      // Remove query params from URL
-      window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+      // Remove query params from URL but keep #credits hash
+      const hash = window.location.hash.split('?')[0];
+      window.history.replaceState({}, '', window.location.pathname + hash);
       
       // Refresh page to update credit balance
       setTimeout(() => {
         window.location.reload();
       }, 1000);
     } else if (creditsStatus === 'cancelled') {
-      // Remove query params
-      window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+      // Remove query params but keep #credits hash
+      const hash = window.location.hash.split('?')[0];
+      window.history.replaceState({}, '', window.location.pathname + hash);
     }
   }, []);
 
