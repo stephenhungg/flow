@@ -194,7 +194,51 @@ app.use(cors(corsOptions));
 // Handle preflight requests explicitly - REMOVED (handled manually at top)
 // app.options('(.*)', cors(corsOptions));
 
+// IMPORTANT: Webhook route must be BEFORE express.json() middleware
+// Stripe webhooks need raw body for signature verification
+/**
+ * POST /api/credits/webhook
+ * Stripe webhook to handle payment completion
+ * IMPORTANT: Must use express.raw() for signature verification
+ * MUST BE BEFORE express.json() middleware
+ */
+app.post('/api/credits/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!stripe || !STRIPE_WEBHOOK_SECRET) {
+    return res.status(500).json({ error: 'Stripe webhook not configured' });
+  }
+
+  const sig = req.headers['stripe-signature'];
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    console.error('❌ [STRIPE] Webhook signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object;
+    const credits = parseInt(session.metadata.credits);
+    const userId = session.metadata.userId;
+
+    try {
+      const usersCollection = getUsersCollection();
+      await usersCollection.findOneAndUpdate(
+        { _id: new ObjectId(userId) },
+        { $inc: { credits: credits } }
+      );
+      console.log(`💰 [CREDITS] Added ${credits} credits to user ${userId}`);
+    } catch (error) {
+      console.error('❌ [CREDITS] Failed to add credits:', error);
+    }
+  }
+
+  res.json({ received: true });
+});
+
 // Increase JSON body limit for screenshots/images (50MB)
+// NOTE: Must be AFTER webhook route (webhooks need raw body)
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
