@@ -98,32 +98,7 @@ export function EducationOverlay({
         </div>
       </motion.div>
 
-      {/* Callouts */}
-      {callouts.map((callout, i) => {
-        const positionClasses = {
-          center: 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2',
-          left: 'top-1/2 left-6 -translate-y-1/2',
-          right: 'top-1/2 right-6 -translate-y-1/2',
-          top: 'top-6 left-1/2 -translate-x-1/2',
-          bottom: 'bottom-32 left-1/2 -translate-x-1/2'
-        };
-
-        return (
-          <motion.div
-            key={i}
-            className={`fixed ${positionClasses[callout.anchor]} z-40 pointer-events-none`}
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: i * 0.2, duration: 0.3 }}
-          >
-            <div className="glass rounded-full px-4 py-2">
-              <p className="font-mono text-xs text-white text-center text-glow">
-                {callout.text}
-              </p>
-            </div>
-          </motion.div>
-        );
-      })}
+      {/* Callouts - disabled to prevent stray text overlays */}
 
       {/* Sources Modal */}
       <AnimatePresence>
