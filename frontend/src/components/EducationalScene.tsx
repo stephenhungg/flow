@@ -8,7 +8,8 @@ import { GenerationLoadingScreen } from './GenerationLoadingScreen';
 import { NarrationOverlay } from './NarrationOverlay';
 import { usePipelineSocket } from '../hooks/usePipelineSocket';
 import { orchestrateConcept, type GeminiOrchestrationResponse } from '../lib/orchestrateConcept';
-import { getProxiedSplatUrl, type OrchestrationData } from '../lib/api';
+import { getProxiedSplatUrl, saveSceneOrchestration, createSceneFromUrl, type OrchestrationData } from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
 
 type SceneMode = 'idle' | 'listening' | 'processing' | 'loading_scene' | 'in_scene';
 
@@ -16,12 +17,14 @@ interface EducationalSceneProps {
   concept: string;
   savedSplatUrl?: string | null;
   savedOrchestration?: OrchestrationData | null;
+  savedSceneId?: string | null;
   customImageData?: string | null;
   onExit?: () => void;
 }
 
-export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, customImageData, onExit }: EducationalSceneProps) {
+export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, savedSceneId, customImageData, onExit }: EducationalSceneProps) {
   const [mode, setMode] = useState<SceneMode>('processing');
+  const { getIdToken } = useAuth();
   const [orchestration, setOrchestration] = useState<GeminiOrchestrationResponse | null>(null);
   const [splatUrl, setSplatUrl] = useState<string>('');
   const [colliderMeshUrl, setColliderMeshUrl] = useState<string | undefined>(undefined);
@@ -46,13 +49,15 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
 
   // Start pipeline when component mounts - prevent double calls
   const pipelineStartedRef = useRef(false);
+  const effectIdRef = useRef(0);
   
   useEffect(() => {
     // Prevent double calls (React StrictMode in dev)
     if (pipelineStartedRef.current) return;
     pipelineStartedRef.current = true;
     
-    let cancelled = false;
+    // Increment effect ID for this effect run
+    const currentEffectId = ++effectIdRef.current;
 
     async function runPipeline() {
       try {
@@ -97,15 +102,65 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
               })),
             });
           } else {
+            // Generate orchestration in background, but don't block scene loading
+            // Use default empty orchestration so scene can load immediately
+            setOrchestration({
+              concept,
+              sceneId: 'saved',
+              learningObjectives: [],
+              keyFacts: [],
+              narrationScript: '',
+              subtitleLines: [],
+              callouts: [],
+              sources: [],
+            });
             // Generate orchestration in background
-            try {
-              const orchestrationResponse = await orchestrateConcept(concept);
-              if (!cancelled) {
+            console.log('🔄 [PIPELINE] Starting orchestration generation...');
+            orchestrateConcept(concept)
+              .then(async orchestrationResponse => {
+                console.log('✅ [PIPELINE] Orchestration generated:', orchestrationResponse);
+                console.log('✅ [PIPELINE] Learning objectives:', orchestrationResponse.learningObjectives?.length || 0);
+                console.log('✅ [PIPELINE] Key facts:', orchestrationResponse.keyFacts?.length || 0);
                 setOrchestration(orchestrationResponse);
-              }
-            } catch (err) {
-              console.warn('⚠️ [PIPELINE] Orchestration failed, continuing without:', err);
-            }
+
+                // Save orchestration to scene if we have a scene ID
+                if (savedSceneId) {
+                  try {
+                    const token = await getIdToken();
+                    if (token) {
+                      // Convert GeminiOrchestrationResponse to OrchestrationData format
+                      // Note: OrchestrationData.keyFacts is string[], but backend stores as objects
+                      // The backend endpoint will handle the conversion
+                      await saveSceneOrchestration(token, savedSceneId, {
+                        learningObjectives: orchestrationResponse.learningObjectives,
+                        keyFacts: orchestrationResponse.keyFacts.map(fact => fact.text), // Convert to string array
+                        narrationScript: orchestrationResponse.narrationScript,
+                        subtitleLines: orchestrationResponse.subtitleLines.map(line => ({
+                          text: line.text,
+                          startTime: line.t,
+                          endTime: line.t + 3 // Default 3 second duration
+                        })),
+                        callouts: orchestrationResponse.callouts.map((callout, i) => ({
+                          id: `callout-${i}`,
+                          text: callout.text,
+                          position: { x: 0, y: 0, z: 0 } // Default position
+                        })),
+                        sources: orchestrationResponse.sources.map(source => ({
+                          title: source.label,
+                          url: source.url
+                        })),
+                      });
+                      console.log('✅ [PIPELINE] Saved orchestration to scene');
+                    }
+                  } catch (saveError) {
+                    console.warn('⚠️ [PIPELINE] Failed to save orchestration:', saveError);
+                    // Don't fail the whole flow if saving fails
+                  }
+                }
+              })
+              .catch(err => {
+                console.warn('⚠️ [PIPELINE] Orchestration failed, continuing without:', err);
+              });
           }
           return;
         }
@@ -133,7 +188,7 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
 
       } catch (err) {
         console.error('❌ [PIPELINE] Error:', err);
-        if (!cancelled) {
+        if (effectIdRef.current === currentEffectId) {
           setMode('processing'); // Stay in processing to show error
         }
       }
@@ -142,17 +197,19 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
     runPipeline();
     
     return () => {
-      cancelled = true;
+      // Mark this effect run as inactive by incrementing the ID
+      effectIdRef.current++;
+      console.log('🧹 [PIPELINE] Cleanup - effect ID incremented');
       // Do not reset pipelineStartedRef to avoid double-run in React StrictMode dev
     };
-  }, [concept, savedSplatUrl, savedOrchestration, customImageData, qualityMode]);
+  }, [concept, savedSplatUrl, savedOrchestration, savedSceneId, customImageData, qualityMode, getIdToken]);
 
   // Watch for pipeline completion
   useEffect(() => {
     if (pipeline.stage === 'complete' && pipeline.splatUrl) {
       console.log('✅ [PIPELINE] Pipeline complete, splat URL:', pipeline.splatUrl);
       setSplatUrl(pipeline.splatUrl);
-      
+
       // Store collider and world info
       if (pipeline.colliderMeshUrl) {
         setColliderMeshUrl(pipeline.colliderMeshUrl);
@@ -160,9 +217,9 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
       if (pipeline.worldId) {
         setWorldId(pipeline.worldId);
       }
-      
+
       setMode('loading_scene');
-      
+
       // Generate orchestration if not already done
       if (!orchestration) {
         orchestrateConcept(concept)
@@ -171,6 +228,17 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
       }
     }
   }, [pipeline.stage, pipeline.splatUrl, pipeline.colliderMeshUrl, pipeline.worldId, concept, orchestration]);
+
+  // Auto-save after screenshot is captured
+  useEffect(() => {
+    if (mode === 'in_scene' && thumbnailDataUrl && pipeline.splatUrl && !savedSceneId) {
+      // Small delay to ensure everything is settled
+      const timer = setTimeout(() => {
+        autoSaveToLibrary();
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [mode, thumbnailDataUrl, pipeline.splatUrl, savedSceneId, autoSaveToLibrary]);
 
   // Handle scene ready
   const handleSceneReady = useCallback(() => {
@@ -183,6 +251,70 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
     console.log('📸 [SCREENSHOT] Captured for thumbnail');
     setThumbnailDataUrl(dataUrl);
   }, []);
+
+  // Auto-save to library when generation completes
+  const autoSaveToLibrary = useCallback(async () => {
+    // Don't auto-save if this is already a saved scene
+    if (savedSceneId) {
+      console.log('⏭️ [AUTO-SAVE] Skipping - scene already saved');
+      return;
+    }
+
+    if (!pipeline.splatUrl) {
+      console.warn('⚠️ [AUTO-SAVE] No splat URL available');
+      return;
+    }
+
+    try {
+      const token = await getIdToken();
+      if (!token) {
+        console.warn('⚠️ [AUTO-SAVE] Not signed in, skipping auto-save');
+        return;
+      }
+
+      console.log('💾 [AUTO-SAVE] Saving world to library...');
+
+      // Generate title from concept (capitalize first letter of each word)
+      const title = concept
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+
+      const sceneData = await createSceneFromUrl(token, {
+        title,
+        concept,
+        isPublic: true, // Auto-save as public
+        splatUrl: pipeline.splatUrl,
+        colliderMeshUrl: colliderMeshUrl,
+        worldId: worldId,
+        thumbnailBase64: thumbnailDataUrl?.replace(/^data:image\/\w+;base64,/, ''),
+        orchestration: orchestration ? {
+          learningObjectives: orchestration.learningObjectives,
+          keyFacts: orchestration.keyFacts.map(fact => typeof fact === 'string' ? fact : fact.text),
+          narrationScript: orchestration.narrationScript,
+          subtitleLines: orchestration.subtitleLines.map(line => ({
+            text: line.text,
+            startTime: line.t,
+            endTime: line.t + 3
+          })),
+          callouts: orchestration.callouts.map((callout, i) => ({
+            id: `callout-${i}`,
+            text: callout.text,
+            position: { x: 0, y: 0, z: 0 }
+          })),
+          sources: orchestration.sources.map(source => ({
+            title: source.label,
+            url: source.url
+          })),
+        } : undefined,
+      });
+
+      console.log('✅ [AUTO-SAVE] World saved to library:', sceneData._id);
+    } catch (error) {
+      console.error('❌ [AUTO-SAVE] Failed to save:', error);
+      // Don't show error to user - auto-save is best-effort
+    }
+  }, [pipeline.splatUrl, concept, colliderMeshUrl, worldId, thumbnailDataUrl, orchestration, savedSceneId, getIdToken]);
 
   // Handle loading complete from GenerationLoadingScreen
   const handleLoadingComplete = useCallback((completedSplatUrl: string) => {
@@ -212,6 +344,7 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
         onComplete={handleLoadingComplete}
         onRetry={handleRetry}
         onExit={onExit}
+        onCancel={onExit}
       />
     );
   }

@@ -45,34 +45,46 @@ export function EducationOverlay({
 
               <div className="space-y-4 overflow-y-auto pr-2 custom-scrollbar">
                 {/* Learning Objectives */}
-                <div>
-                  <h3 className="font-mono text-xs text-white/80 mb-2 uppercase tracking-wider">
-                    Learning Objectives
-                  </h3>
-                  <ul className="space-y-1">
-                    {learningObjectives.map((obj, i) => (
-                      <li key={i} className="font-mono text-sm text-white flex items-start">
-                        <span className="text-white/60 mr-2">•</span>
-                        <span>{obj}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                {learningObjectives && learningObjectives.length > 0 && (
+                  <div>
+                    <h3 className="font-mono text-xs text-white/80 mb-2 uppercase tracking-wider">
+                      Learning Objectives
+                    </h3>
+                    <ul className="space-y-1">
+                      {learningObjectives.map((obj, i) => (
+                        <li key={i} className="font-mono text-sm text-white flex items-start">
+                          <span className="text-white/60 mr-2">•</span>
+                          <span>{obj}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
                 {/* Key Facts */}
-                <div>
-                  <h3 className="font-mono text-xs text-white/80 mb-2 uppercase tracking-wider">
-                    Key Facts
-                  </h3>
-                  <ul className="space-y-2">
-                    {keyFacts.map((fact, i) => (
-                      <li key={i} className="font-mono text-xs text-white/95">
-                        <span>{fact.text}</span>
-                        <span className="text-white/60 ml-2">— {fact.source}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                {keyFacts && keyFacts.length > 0 && (
+                  <div>
+                    <h3 className="font-mono text-xs text-white/80 mb-2 uppercase tracking-wider">
+                      Key Facts
+                    </h3>
+                    <ul className="space-y-2">
+                      {keyFacts.map((fact, i) => (
+                        <li key={i} className="font-mono text-xs text-white/95">
+                          <span>{fact.text}</span>
+                          {fact.source && (
+                            <span className="text-white/60 ml-2">— {fact.source}</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {(!learningObjectives || learningObjectives.length === 0) && (!keyFacts || keyFacts.length === 0) && (
+                  <div className="text-white/40 font-mono text-xs text-center py-4">
+                    No educational content available yet
+                  </div>
+                )}
 
                 {/* Sources Button */}
                 {sources.length > 0 && (

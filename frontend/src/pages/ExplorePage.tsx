@@ -11,6 +11,7 @@ export function ExplorePage() {
   const [concept, setConcept] = useState<string | null>(null);
   const [savedSplatUrl, setSavedSplatUrl] = useState<string | null>(null);
   const [savedOrchestration, setSavedOrchestration] = useState<OrchestrationData | null>(null);
+  const [savedSceneId, setSavedSceneId] = useState<string | null>(null);
   const [customImageData, setCustomImageData] = useState<string | null>(null);
   const [showFadeOverlay, setShowFadeOverlay] = useState(true);
   const [isLoadingSavedScene, setIsLoadingSavedScene] = useState(false);
@@ -42,6 +43,8 @@ export function ExplorePage() {
       getScene(sceneId)
         .then(scene => {
           console.log('📚 [EXPLORE] Scene loaded:', scene.title, scene.splatUrl);
+          // Store scene ID for saving orchestration later
+          setSavedSceneId(scene._id);
           // Set the splat URL BEFORE setting concept
           if (scene.splatUrl) {
             setSavedSplatUrl(scene.splatUrl);
@@ -167,6 +170,7 @@ export function ExplorePage() {
           concept={concept}
           savedSplatUrl={savedSplatUrl}
           savedOrchestration={savedOrchestration}
+          savedSceneId={savedSceneId}
           customImageData={customImageData}
           onExit={handleExit}
         />

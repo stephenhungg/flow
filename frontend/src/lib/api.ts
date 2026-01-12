@@ -197,6 +197,29 @@ export async function createSceneFromUrl(
 }
 
 /**
+ * Save orchestration to a scene
+ */
+export async function saveSceneOrchestration(
+  token: string,
+  sceneId: string,
+  orchestration: OrchestrationData
+): Promise<void> {
+  const response = await fetch(`${API_URL}/api/scenes/${sceneId}/orchestration`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ orchestration }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to save orchestration');
+  }
+}
+
+/**
  * Get proxied splat URL to bypass CORS
  * Use this when loading splats from Vultr Object Storage
  */
@@ -222,6 +245,23 @@ export async function generateSceneDescription(sceneId: string): Promise<string>
 
   const data = await response.json();
   return data.description;
+}
+
+/**
+ * Generate thumbnail for a scene
+ */
+export async function generateSceneThumbnail(sceneId: string): Promise<string> {
+  const response = await fetch(`${API_URL}/api/scenes/${sceneId}/generate-thumbnail`, {
+    method: 'POST',
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to generate thumbnail');
+  }
+  
+  const data = await response.json();
+  return data.thumbnailUrl;
 }
 
 // ============================================

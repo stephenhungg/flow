@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { PipelineStage } from '../hooks/usePipelineSocket';
+import LightPillar from './LightPillar';
 
 interface GenerationLoadingScreenProps {
   stage: PipelineStage;
@@ -19,6 +20,7 @@ interface GenerationLoadingScreenProps {
   error?: string | null;
   onRetry?: () => void;
   onExit?: () => void;
+  onCancel?: () => void;
 }
 
 // User-friendly error messages
@@ -87,6 +89,7 @@ export function GenerationLoadingScreen({
   error,
   onRetry,
   onExit,
+  onCancel,
 }: GenerationLoadingScreenProps) {
   const [terminalLines, setTerminalLines] = useState<string[]>([]);
   const [glitchText, setGlitchText] = useState(concept);
@@ -141,6 +144,19 @@ export function GenerationLoadingScreen({
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-black">
+      {/* Light Pillar Background */}
+      <LightPillar
+        topColor="#8B5CF6"
+        bottomColor="#3B82F6"
+        intensity={0.5}
+        rotationSpeed={0.2}
+        glowAmount={0.008}
+        pillarWidth={2.5}
+        pillarHeight={0.5}
+        noiseIntensity={0.3}
+        mixBlendMode="screen"
+        className="opacity-40"
+      />
 
       {/* Radial gradient breathing animation */}
       <div 
@@ -246,16 +262,30 @@ export function GenerationLoadingScreen({
                   <span className="text-white/60">{message || 'initializing...'}</span>
                 </div>
                 
-                {/* Stay on page warning */}
+                {/* Stay on page warning + Cancel button */}
                 <motion.div
                   initial={{ opacity: 0, y: 5 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.8 }}
-                  className="mt-3 text-left"
+                  className="mt-3 flex items-center justify-between gap-4"
                 >
                   <p className="text-yellow-400/70 text-[11px] font-mono">
                     ⚠️ Stay on this page while we generate your world.
                   </p>
+                  {onCancel && stage !== 'complete' && stage !== 'error' && (
+                    <motion.button
+                      onClick={onCancel}
+                      className="px-3 py-1.5 rounded-md font-mono text-xs text-white/60 hover:text-white transition-all hover:scale-105"
+                      style={{
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                      }}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      Cancel
+                    </motion.button>
+                  )}
                 </motion.div>
               </motion.div>
 

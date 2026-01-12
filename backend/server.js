@@ -907,6 +907,61 @@ app.post('/api/scenes', authMiddleware, uploadLarge.single('splatFile'), async (
       { $set: updateData }
     );
 
+    // Auto-generate thumbnail if not provided (async, don't block response)
+    const GEMINI_API_KEY_FOR_THUMB = process.env.VITE_GEMINI_API_KEY;
+    if (!vultrThumbnailUrl && GEMINI_API_KEY_FOR_THUMB) {
+      (async () => {
+        try {
+          console.log(`🎨 [SCENES] Auto-generating thumbnail for uploaded scene: ${sceneId}`);
+          const { GoogleGenerativeAI } = await import('@google/generative-ai');
+          const genAI = new GoogleGenerativeAI(GEMINI_API_KEY_FOR_THUMB);
+          const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp-image-generation' });
+
+          const prompt = `Create a beautiful thumbnail image (4:3 aspect ratio) for a 3D educational scene about: ${concept || title}
+
+STYLE:
+- Bright, engaging, and educational
+- Clear focal point that represents the concept
+- Professional quality, suitable for a library thumbnail
+- Vibrant colors, good contrast
+- Clean composition
+
+TECHNICAL:
+- 4:3 aspect ratio (ideal for thumbnails)
+- High quality, sharp details
+- No text, no borders, no UI elements`;
+
+          const result = await model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: {
+              responseModalities: ['image', 'text'],
+            },
+          });
+          const response = await result.response;
+          
+          const imagePart = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData);
+          if (imagePart?.inlineData) {
+            const imageData = imagePart.inlineData.data;
+            const imageMimeType = imagePart.inlineData.mimeType || 'image/png';
+            const imageBuffer = Buffer.from(imageData, 'base64');
+
+            const thumbnailKey = `scenes/${user._id}/${sceneId}/thumbnail.png`;
+            const thumbnailUrl = await uploadFile(imageBuffer, thumbnailKey, imageMimeType);
+            
+            await scenesCollection.updateOne(
+              { _id: sceneId },
+              { $set: { thumbnailUrl, updatedAt: new Date() } }
+            );
+            
+            console.log(`✅ [SCENES] Auto-generated thumbnail for scene: ${sceneId}`);
+          }
+        } catch (thumbGenError) {
+          console.warn(`⚠️ [SCENES] Auto-thumbnail generation failed for scene ${sceneId}:`, thumbGenError.message);
+          // Don't throw - this is background generation
+        }
+      })();
+    }
+
     res.status(201).json({
       _id: sceneId.toString(),
       ...sceneData,
@@ -1033,6 +1088,291 @@ The description should be informative, accessible, and suitable for a learning e
     res.json({ description });
   } catch (error) {
     console.error('❌ [SCENES] Generate description error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/scenes/:id/generate-thumbnail
+ * Generate thumbnail image for a scene using Gemini
+ */
+app.post('/api/scenes/:id/generate-thumbnail', async (req, res) => {
+  try {
+    const sceneId = req.params.id;
+    
+    if (!ObjectId.isValid(sceneId)) {
+      return res.status(400).json({ error: 'Invalid scene ID' });
+    }
+
+    const scenesCollection = getScenesCollection();
+    const scene = await scenesCollection.findOne({ _id: new ObjectId(sceneId) });
+
+    if (!scene) {
+      return res.status(404).json({ error: 'Scene not found' });
+    }
+
+    // If thumbnail already exists, return it
+    if (scene.thumbnailUrl) {
+      return res.json({ thumbnailUrl: scene.thumbnailUrl });
+    }
+
+    // Generate thumbnail using Gemini
+    if (!GEMINI_API_KEY) {
+      return res.status(500).json({ error: 'Gemini API key not configured' });
+    }
+
+    console.log(`🎨 [SCENES] Generating thumbnail for scene: ${sceneId}, concept: ${scene.concept}`);
+
+    try {
+      const { GoogleGenerativeAI } = await import('@google/generative-ai');
+      const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp-image-generation' });
+
+      // Create a thumbnail-optimized prompt
+      const prompt = `Create a beautiful thumbnail image (4:3 aspect ratio) for a 3D educational scene about: ${scene.concept || scene.title}
+
+STYLE:
+- Bright, engaging, and educational
+- Clear focal point that represents the concept
+- Professional quality, suitable for a library thumbnail
+- Vibrant colors, good contrast
+- Clean composition
+
+TECHNICAL:
+- 4:3 aspect ratio (ideal for thumbnails)
+- High quality, sharp details
+- No text, no borders, no UI elements`;
+
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseModalities: ['image', 'text'],
+        },
+      });
+      const response = await result.response;
+      
+      // Extract image data from response
+      const imagePart = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData);
+      if (!imagePart?.inlineData) {
+        throw new Error('No image data in Gemini response');
+      }
+
+      const imageData = imagePart.inlineData.data;
+      const imageMimeType = imagePart.inlineData.mimeType || 'image/png';
+      const imageBuffer = Buffer.from(imageData, 'base64');
+
+      console.log(`✅ [SCENES] Thumbnail generated: ${imageBuffer.length} bytes`);
+
+      // Get user info for upload path
+      const usersCollection = getUsersCollection();
+      const user = await usersCollection.findOne({ _id: scene.creatorId });
+      if (!user) {
+        return res.status(404).json({ error: 'Creator not found' });
+      }
+
+      // Upload thumbnail to Vultr
+      const thumbnailKey = `scenes/${scene.creatorId}/${sceneId}/thumbnail.png`;
+      const thumbnailUrl = await uploadFile(imageBuffer, thumbnailKey, imageMimeType);
+      console.log(`✅ [SCENES] Thumbnail uploaded to Vultr: ${thumbnailUrl}`);
+
+      // Update scene with thumbnail URL
+      await scenesCollection.updateOne(
+        { _id: new ObjectId(sceneId) },
+        { $set: { thumbnailUrl, updatedAt: new Date() } }
+      );
+
+      res.json({ thumbnailUrl });
+    } catch (geminiError) {
+      console.error('❌ [SCENES] Gemini thumbnail generation error:', geminiError);
+      // Fallback: return error but don't fail completely
+      res.status(500).json({ error: geminiError.message || 'Failed to generate thumbnail' });
+    }
+  } catch (error) {
+    console.error('❌ [SCENES] Generate thumbnail error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/admin/generate-missing-thumbnails
+ * Batch generate thumbnails for all scenes missing them
+ * Admin-only endpoint
+ */
+app.post('/api/admin/generate-missing-thumbnails', authMiddleware, async (req, res) => {
+  try {
+    // Check if user is admin
+    const usersCollection = getUsersCollection();
+    const user = await usersCollection.findOne({ firebaseUid: req.user.uid });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const ADMIN_EMAILS = process.env.ADMIN_EMAILS 
+      ? process.env.ADMIN_EMAILS.split(',').map(e => e.trim().toLowerCase())
+      : ['stpnhh@gmail.com'];
+    
+    if (!user.email || !ADMIN_EMAILS.includes(user.email.toLowerCase())) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const GEMINI_API_KEY_FOR_BATCH = process.env.VITE_GEMINI_API_KEY;
+    if (!GEMINI_API_KEY_FOR_BATCH) {
+      return res.status(500).json({ error: 'Gemini API key not configured' });
+    }
+
+    const scenesCollection = getScenesCollection();
+    
+    // Find all scenes without thumbnails
+    const scenesWithoutThumbnails = await scenesCollection.find({
+      $or: [
+        { thumbnailUrl: null },
+        { thumbnailUrl: { $exists: false } }
+      ]
+    }).toArray();
+
+    console.log(`🎨 [BATCH] Found ${scenesWithoutThumbnails.length} scenes without thumbnails`);
+
+    if (scenesWithoutThumbnails.length === 0) {
+      return res.json({ 
+        message: 'All scenes already have thumbnails',
+        processed: 0,
+        succeeded: 0,
+        failed: 0
+      });
+    }
+
+    // Return immediately and process in background
+    res.json({ 
+      message: `Started generating thumbnails for ${scenesWithoutThumbnails.length} scenes`,
+      total: scenesWithoutThumbnails.length
+    });
+
+    // Process in background
+    (async () => {
+      const { GoogleGenerativeAI } = await import('@google/generative-ai');
+      const genAI = new GoogleGenerativeAI(GEMINI_API_KEY_FOR_BATCH);
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp-image-generation' });
+
+      let succeeded = 0;
+      let failed = 0;
+
+      for (const scene of scenesWithoutThumbnails) {
+        try {
+          console.log(`🎨 [BATCH] Generating thumbnail for scene ${scene._id}: ${scene.concept || scene.title}`);
+
+          const prompt = `Create a beautiful thumbnail image (4:3 aspect ratio) for a 3D educational scene about: ${scene.concept || scene.title}
+
+STYLE:
+- Bright, engaging, and educational
+- Clear focal point that represents the concept
+- Professional quality, suitable for a library thumbnail
+- Vibrant colors, good contrast
+- Clean composition
+
+TECHNICAL:
+- 4:3 aspect ratio (ideal for thumbnails)
+- High quality, sharp details
+- No text, no borders, no UI elements`;
+
+          const result = await model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: {
+              responseModalities: ['image', 'text'],
+            },
+          });
+          const response = await result.response;
+          
+          const imagePart = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData);
+          if (imagePart?.inlineData) {
+            const imageData = imagePart.inlineData.data;
+            const imageMimeType = imagePart.inlineData.mimeType || 'image/png';
+            const imageBuffer = Buffer.from(imageData, 'base64');
+
+            const thumbnailKey = `scenes/${scene.creatorId}/${scene._id}/thumbnail.png`;
+            const thumbnailUrl = await uploadFile(imageBuffer, thumbnailKey, imageMimeType);
+            
+            await scenesCollection.updateOne(
+              { _id: scene._id },
+              { $set: { thumbnailUrl, updatedAt: new Date() } }
+            );
+            
+            console.log(`✅ [BATCH] Generated thumbnail for scene ${scene._id}`);
+            succeeded++;
+          } else {
+            throw new Error('No image data in Gemini response');
+          }
+
+          // Add a small delay to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        } catch (error) {
+          console.error(`❌ [BATCH] Failed to generate thumbnail for scene ${scene._id}:`, error.message);
+          failed++;
+        }
+      }
+
+      console.log(`✅ [BATCH] Batch thumbnail generation complete: ${succeeded} succeeded, ${failed} failed`);
+    })();
+
+  } catch (error) {
+    console.error('❌ [BATCH] Batch thumbnail generation error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/scenes/:id/orchestration
+ * Save orchestration (educational content) to a scene
+ */
+app.post('/api/scenes/:id/orchestration', authMiddleware, async (req, res) => {
+  try {
+    const sceneId = req.params.id;
+    
+    if (!ObjectId.isValid(sceneId)) {
+      return res.status(400).json({ error: 'Invalid scene ID' });
+    }
+
+    const { orchestration } = req.body;
+    
+    if (!orchestration) {
+      return res.status(400).json({ error: 'Orchestration data is required' });
+    }
+
+    const scenesCollection = getScenesCollection();
+    const scene = await scenesCollection.findOne({ _id: new ObjectId(sceneId) });
+
+    if (!scene) {
+      return res.status(404).json({ error: 'Scene not found' });
+    }
+
+    // Verify user owns the scene (optional - could allow public updates)
+    const usersCollection = getUsersCollection();
+    const user = await usersCollection.findOne({ firebaseUid: req.user.uid });
+    if (!user || scene.creatorId.toString() !== user._id.toString()) {
+      return res.status(403).json({ error: 'You can only update orchestration for your own scenes' });
+    }
+
+    // Update scene with orchestration
+    await scenesCollection.updateOne(
+      { _id: new ObjectId(sceneId) },
+      { 
+        $set: { 
+          orchestration: {
+            learningObjectives: orchestration.learningObjectives || [],
+            keyFacts: orchestration.keyFacts || [],
+            narrationScript: orchestration.narrationScript || '',
+            subtitleLines: orchestration.subtitleLines || [],
+            callouts: orchestration.callouts || [],
+            sources: orchestration.sources || [],
+          },
+          updatedAt: new Date()
+        }
+      }
+    );
+
+    console.log(`✅ [SCENES] Saved orchestration for scene ${sceneId}`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ [SCENES] Save orchestration error:', error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -22,6 +22,7 @@ interface TiltedCardProps {
   displayOverlayContent?: boolean;
   onClick?: () => void;
   className?: string;
+  placeholderContent?: React.ReactNode;
 }
 
 const springValues: SpringOptions = {
@@ -44,7 +45,8 @@ export function TiltedCard({
   overlayContent = null,
   displayOverlayContent = true,
   onClick,
-  className = ''
+  className = '',
+  placeholderContent = null
 }: TiltedCardProps) {
   const ref = useRef<HTMLElement>(null);
   const x = useMotionValue(0);
@@ -125,6 +127,10 @@ export function TiltedCard({
             alt={altText}
             className="absolute inset-0 w-full h-full object-cover rounded-xl will-change-transform [transform:translateZ(0)]"
           />
+        ) : placeholderContent ? (
+          <div className="absolute inset-0 w-full h-full rounded-xl overflow-hidden">
+            {placeholderContent}
+          </div>
         ) : (
           <div className="absolute inset-0 w-full h-full rounded-xl bg-gradient-to-br from-blue-900/40 to-slate-900/40 flex items-center justify-center">
             <span className="font-mono text-xs text-white/20 tracking-widest uppercase">no preview</span>

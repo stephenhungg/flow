@@ -7,11 +7,13 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { NavBar } from '../components/NavBar';
 import { useAuth } from '../contexts/AuthContext';
-import { listScenes, deleteScene, getMyScenes, generateSceneDescription, type Scene, type PaginatedScenes } from '../lib/api';
-import { Search, Grid, User, Sparkles, X, Play, Eye, Calendar, Trash2 } from 'lucide-react';
+import { listScenes, deleteScene, getMyScenes, generateSceneDescription, generateSceneThumbnail, type Scene, type PaginatedScenes } from '../lib/api';
+import { Search, Grid, User, Sparkles, X, Play, Eye, Calendar, Trash2, Upload } from 'lucide-react';
 import { CloudBackground } from '../components/CloudBackground';
 import { useOutsideClick } from '../hooks/useOutsideClick';
 import { TiltedCard } from '../components/TiltedCard';
+import { UploadSceneModal } from '../components/UploadSceneModal';
+import { ThumbnailPlaceholder } from '../components/ThumbnailPlaceholder';
 
 type Tab = 'public' | 'my-scenes';
 
@@ -36,6 +38,8 @@ export function LibraryPage() {
   // Expandable card state
   const [activeScene, setActiveScene] = useState<Scene | null>(null);
   const [generatingDescription, setGeneratingDescription] = useState(false);
+  const [generatingThumbnails, setGeneratingThumbnails] = useState<Set<string>>(new Set());
+  const [showUploadModal, setShowUploadModal] = useState(false);
 
   // Add class to body for cloud shader background
   useEffect(() => {
@@ -94,6 +98,37 @@ export function LibraryPage() {
       // Don't show error to user, just silently fail
     } finally {
       setGeneratingDescription(false);
+    }
+  };
+
+  const generateThumbnail = async (sceneId: string) => {
+    if (generatingThumbnails.has(sceneId)) return;
+    
+    try {
+      setGeneratingThumbnails(prev => new Set(prev).add(sceneId));
+      console.log(`🎨 [LIBRARY] Generating thumbnail for scene: ${sceneId}`);
+      
+      const thumbnailUrl = await generateSceneThumbnail(sceneId);
+      
+      // Update active scene with new thumbnail
+      if (activeScene && activeScene._id === sceneId) {
+        setActiveScene({ ...activeScene, thumbnailUrl });
+      }
+      
+      // Update in scenes list
+      setPublicScenes(prev => prev.map(s => s._id === sceneId ? { ...s, thumbnailUrl } : s));
+      setMyScenes(prev => prev.map(s => s._id === sceneId ? { ...s, thumbnailUrl } : s));
+      
+      console.log(`✅ [LIBRARY] Thumbnail generated`);
+    } catch (err) {
+      console.error('Failed to generate thumbnail:', err);
+      // Don't show error to user, just silently fail
+    } finally {
+      setGeneratingThumbnails(prev => {
+        const next = new Set(prev);
+        next.delete(sceneId);
+        return next;
+      });
     }
   };
 
@@ -288,9 +323,7 @@ export function LibraryPage() {
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-blue-900/40 to-slate-900/40 flex items-center justify-center">
-                    <div className="font-mono text-xs text-white/20 tracking-widest uppercase">no preview</div>
-                  </div>
+                  <ThumbnailPlaceholder concept={activeScene.concept} />
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
                 
@@ -485,20 +518,31 @@ export function LibraryPage() {
             </button>
             
             {dbUser && (
-              <button
-                onClick={() => setTab('my-scenes')}
-                className={`px-5 py-2.5 rounded-full text-sm font-mono transition-all flex items-center gap-2 ${
-                  tab === 'my-scenes' 
-                    ? 'bg-white/10 text-white border border-white/20' 
-                    : 'text-white/40 hover:text-white/60 border border-transparent hover:border-white/10'
-                }`}
-              >
-                <User size={14} />
-                my worlds
-                <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded-full">
-                  {myScenes.length}
-                </span>
-              </button>
+              <>
+                <button
+                  onClick={() => setTab('my-scenes')}
+                  className={`px-5 py-2.5 rounded-full text-sm font-mono transition-all flex items-center gap-2 ${
+                    tab === 'my-scenes' 
+                      ? 'bg-white/10 text-white border border-white/20' 
+                      : 'text-white/40 hover:text-white/60 border border-transparent hover:border-white/10'
+                  }`}
+                >
+                  <User size={14} />
+                  my worlds
+                  <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded-full">
+                    {myScenes.length}
+                  </span>
+                </button>
+                {tab === 'my-scenes' && (
+                  <button
+                    onClick={() => setShowUploadModal(true)}
+                    className="px-5 py-2.5 rounded-full text-sm font-mono transition-all flex items-center gap-2 bg-blue-500 hover:bg-blue-400 text-white border border-blue-400"
+                  >
+                    <Upload size={14} />
+                    upload .spz
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -592,6 +636,13 @@ export function LibraryPage() {
                           tooltipText={`Enter ${scene.title}`}
                           displayOverlayContent={true}
                           overlayContent={<CardOverlay scene={scene} />}
+                          placeholderContent={!scene.thumbnailUrl ? (
+                            <ThumbnailPlaceholder 
+                              concept={scene.concept} 
+                              onGenerate={() => generateThumbnail(scene._id)}
+                              isGenerating={generatingThumbnails.has(scene._id)}
+                            />
+                          ) : undefined}
                           onClick={() => setActiveScene(scene)}
                         />
                       </motion.div>
@@ -625,6 +676,17 @@ export function LibraryPage() {
           </div>
         </footer>
       </div>
+
+      {/* Upload Modal */}
+      <UploadSceneModal
+        isOpen={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+        onUploadComplete={() => {
+          if (tab === 'my-scenes' && dbUser) {
+            loadMyScenes();
+          }
+        }}
+      />
     </div>
   );
 }

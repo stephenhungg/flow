@@ -72,13 +72,21 @@ Return as JSON matching this structure:
     const data = await response.json();
     const text = data.candidates[0].content.parts[0].text;
     
+    console.log('📝 [ORCHESTRATE] Gemini raw response:', text);
+    
     // Extract JSON from response
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
+      console.error('❌ [ORCHESTRATE] No JSON found in response');
       throw new Error('No JSON found in Gemini response');
     }
 
-    return JSON.parse(jsonMatch[0]) as GeminiOrchestrationResponse;
+    const parsed = JSON.parse(jsonMatch[0]) as GeminiOrchestrationResponse;
+    console.log('📝 [ORCHESTRATE] Parsed orchestration:', parsed);
+    console.log('📝 [ORCHESTRATE] Learning objectives count:', parsed.learningObjectives?.length || 0);
+    console.log('📝 [ORCHESTRATE] Key facts count:', parsed.keyFacts?.length || 0);
+    
+    return parsed;
   } catch (error) {
     console.error('Error orchestrating concept:', error);
     throw error;

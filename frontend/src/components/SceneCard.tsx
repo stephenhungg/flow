@@ -7,6 +7,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Eye, Heart, Share2, Trash2, Play } from 'lucide-react';
 import type { Scene } from '../lib/api';
+import { ThumbnailPlaceholder } from './ThumbnailPlaceholder';
 
 interface SceneCardProps {
   scene: Scene;
@@ -124,9 +125,7 @@ export function SceneCard({ scene, onDelete, canDelete = false }: SceneCardProps
             </motion.div>
           </>
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-blue-900/40 to-slate-900/40 flex items-center justify-center">
-            <div className="font-mono text-xs text-white/20 tracking-widest uppercase">no preview</div>
-          </div>
+          <ThumbnailPlaceholder concept={scene.concept} />
         )}
         
         {/* Gradient Overlay for Text Readability */}
