@@ -520,6 +520,164 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
 });
 
 // ============================================
+// Credits & Payment Endpoints
+// ============================================
+
+/**
+ * Middleware to check if user has enough credits
+ */
+async function creditCheckMiddleware(req, res, next) {
+  try {
+    const userId = req.user?.uid;
+    
+    if (!userId) {
+      return res.status(401).json({ 
+        error: 'Authentication required',
+        message: 'Please sign in to generate scenes. Each generation costs credits.'
+      });
+    }
+
+    const usersCollection = getUsersCollection();
+    const user = await usersCollection.findOne({ firebaseUid: userId });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const credits = user.credits || 0;
+    
+    if (credits < CREDITS_PER_GENERATION) {
+      return res.status(402).json({
+        error: 'Insufficient credits',
+        message: `You need ${CREDITS_PER_GENERATION} credit(s) to generate a scene. You have ${credits} credit(s).`,
+        credits: credits,
+        required: CREDITS_PER_GENERATION
+      });
+    }
+
+    req.userCredits = credits;
+    req.userId = user._id;
+    next();
+  } catch (error) {
+    console.error('❌ [CREDITS] Check error:', error);
+    res.status(500).json({ error: 'Failed to check credits' });
+  }
+}
+
+/**
+ * POST /api/credits/create-checkout
+ * Create Stripe checkout session for purchasing credits
+ */
+app.post('/api/credits/create-checkout', authMiddleware, async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(500).json({ error: 'Stripe not configured. Please set STRIPE_SECRET_KEY.' });
+    }
+
+    const { packageId } = req.body;
+    const credits = parseInt(packageId);
+    const amount = CREDITS_PACKAGES[credits];
+
+    if (!amount) {
+      return res.status(400).json({ error: 'Invalid credit package' });
+    }
+
+    const usersCollection = getUsersCollection();
+    const user = await usersCollection.findOne({ firebaseUid: req.user.uid });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const origin = req.headers.origin || 'https://flow.stephenhung.me';
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: `${credits} Generation Credits`,
+              description: `Purchase ${credits} credits to generate ${credits} 3D scenes`,
+            },
+            unit_amount: amount,
+          },
+          quantity: 1,
+        },
+      ],
+      mode: 'payment',
+      success_url: `${origin}/?credits=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/?credits=cancelled`,
+      client_reference_id: user._id.toString(),
+      metadata: {
+        userId: user._id.toString(),
+        firebaseUid: req.user.uid,
+        credits: credits.toString(),
+      },
+    });
+
+    res.json({ sessionId: session.id, url: session.url });
+  } catch (error) {
+    console.error('❌ [STRIPE] Checkout error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/credits/webhook
+ * Stripe webhook to handle payment completion
+ * IMPORTANT: Must use express.raw() for signature verification
+ */
+app.post('/api/credits/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!stripe || !STRIPE_WEBHOOK_SECRET) {
+    return res.status(500).json({ error: 'Stripe webhook not configured' });
+  }
+
+  const sig = req.headers['stripe-signature'];
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    console.error('❌ [STRIPE] Webhook signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object;
+    const credits = parseInt(session.metadata.credits);
+    const userId = session.metadata.userId;
+
+    try {
+      const usersCollection = getUsersCollection();
+      await usersCollection.findOneAndUpdate(
+        { _id: new ObjectId(userId) },
+        { $inc: { credits: credits } }
+      );
+      console.log(`💰 [CREDITS] Added ${credits} credits to user ${userId}`);
+    } catch (error) {
+      console.error('❌ [CREDITS] Failed to add credits:', error);
+    }
+  }
+
+  res.json({ received: true });
+});
+
+/**
+ * GET /api/credits/packages
+ * Get available credit packages
+ */
+app.get('/api/credits/packages', (req, res) => {
+  const packages = Object.entries(CREDITS_PACKAGES).map(([credits, amount]) => ({
+    credits: parseInt(credits),
+    price: amount / 100,
+    priceCents: amount,
+  }));
+
+  res.json({ packages });
+});
+
+// ============================================
 // Scenes Library Endpoints
 // ============================================
 

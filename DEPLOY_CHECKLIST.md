@@ -32,6 +32,10 @@ ELEVENLABS_API_KEY=your_elevenlabs_key
 ELEVENLABS_VOICE_ID=your_voice_id (optional)
 DEEPGRAM_API_KEY=your_deepgram_key
 
+# Stripe Payment (for credit system)
+STRIPE_SECRET_KEY=sk_test_... (get from Stripe dashboard)
+STRIPE_WEBHOOK_SECRET=whsec_... (get from Stripe webhook settings)
+
 # Server
 PORT=3001
 ```
