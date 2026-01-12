@@ -1445,15 +1445,18 @@ app.post('/api/pipeline/start', authMiddleware, creditCheckMiddleware, rateLimit
     runPipeline(jobId, concept, imageFile, quality).catch(async (err) => {
       console.error(`❌ [PIPELINE] Job ${jobId} failed:`, err);
       
-      // Refund credits if generation fails
-      try {
-        await usersCollection.findOneAndUpdate(
-          { _id: req.userId },
-          { $inc: { credits: CREDITS_PER_GENERATION } }
-        );
-        console.log(`💰 [CREDITS] Refunded ${CREDITS_PER_GENERATION} credit(s) due to generation failure.`);
-      } catch (refundError) {
-        console.error('❌ [CREDITS] Failed to refund credits:', refundError);
+      // Refund credits if generation fails - skip for admin
+      if (!req.isAdmin) {
+        try {
+          const usersCollection = getUsersCollection();
+          await usersCollection.findOneAndUpdate(
+            { _id: req.userId },
+            { $inc: { credits: CREDITS_PER_GENERATION } }
+          );
+          console.log(`💰 [CREDITS] Refunded ${CREDITS_PER_GENERATION} credit(s) due to generation failure.`);
+        } catch (refundError) {
+          console.error('❌ [CREDITS] Failed to refund credits:', refundError);
+        }
       }
       
       emitPipelineUpdate(jobId, 'error', 0, err.message, { error: true });
