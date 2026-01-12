@@ -13,6 +13,7 @@ import cors from 'cors';
 import multer from 'multer';
 import fetch from 'node-fetch';
 import dotenv from 'dotenv';
+import Stripe from 'stripe';
 import { connectToDatabase, getUsersCollection, getScenesCollection } from './server/lib/mongodb.js';
 import { authMiddleware } from './server/lib/auth.js';
 import { uploadFile, deleteFile, generateSplatKey } from './server/lib/storage.js';
@@ -231,6 +232,20 @@ const MARBLE_OPERATIONS_ENDPOINT = `${MARBLE_API_BASE}/marble/v1/operations`;
 const MARBLE_WORLDS_ENDPOINT = `${MARBLE_API_BASE}/marble/v1/worlds`;
 const MARBLE_MEDIA_ENDPOINT = `${MARBLE_API_BASE}/marble/v1/media-assets:prepare_upload`;
 
+// Stripe configuration for credit payments
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
+const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
+
+// Credit system configuration
+const CREDITS_PER_GENERATION = 1; // Cost per 3D generation
+const CREDITS_PACKAGES = {
+  5: 499,   // $4.99 for 5 credits
+  10: 899,  // $8.99 for 10 credits  
+  20: 1599, // $15.99 for 20 credits
+  50: 3499, // $34.99 for 50 credits
+};
+
 // Proxy endpoint for Marble API - handles image upload and world generation
 app.post('/api/marble/convert', upload.single('image'), handleMulterError, async (req, res) => {
   try {
@@ -445,6 +460,7 @@ app.post('/api/auth/verify', async (req, res) => {
       email: decodedToken.email || '',
       displayName: decodedToken.name || decodedToken.email?.split('@')[0] || 'User',
       photoURL: decodedToken.picture || null,
+      credits: 0, // Initialize credits to 0
       updatedAt: new Date(),
     };
 
@@ -467,6 +483,7 @@ app.post('/api/auth/verify', async (req, res) => {
         email: updatedUser.email,
         displayName: updatedUser.displayName,
         photoURL: updatedUser.photoURL,
+        credits: updatedUser.credits || 0,
       }
     });
   } catch (error) {
@@ -494,6 +511,7 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
       email: user.email,
       displayName: user.displayName,
       photoURL: user.photoURL,
+      credits: user.credits || 0,
     });
   } catch (error) {
     console.error('❌ [AUTH] Get me error:', error);
@@ -1213,7 +1231,7 @@ Give a helpful, engaging 2-3 sentence response. Include interesting facts, histo
  * Start a new world generation pipeline with real-time updates
  * Rate limited to prevent excessive API costs
  */
-app.post('/api/pipeline/start', rateLimitMiddleware, upload.single('image'), async (req, res) => {
+app.post('/api/pipeline/start', authMiddleware, creditCheckMiddleware, rateLimitMiddleware, upload.single('image'), async (req, res) => {
   const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   
   try {
@@ -1224,20 +1242,44 @@ app.post('/api/pipeline/start', rateLimitMiddleware, upload.single('image'), asy
       return res.status(400).json({ error: 'Concept is required' });
     }
 
+    // Deduct credits immediately (before generation starts)
+    const usersCollection = getUsersCollection();
+    const result = await usersCollection.findOneAndUpdate(
+      { _id: req.userId },
+      { $inc: { credits: -CREDITS_PER_GENERATION } },
+      { returnDocument: 'after' }
+    );
+    
+    const newCredits = result.value?.credits || result?.credits || 0;
+    console.log(`💰 [CREDITS] Deducted ${CREDITS_PER_GENERATION} credit(s). User now has ${newCredits} credit(s).`);
+
     // Store job info
     pipelineJobs.set(jobId, {
       status: 'started',
       concept,
       quality: quality || 'standard',
-      startTime: Date.now()
+      startTime: Date.now(),
+      userId: req.userId.toString(),
     });
 
     // Return jobId immediately so frontend can subscribe
-    res.json({ jobId, status: 'started' });
+    res.json({ jobId, status: 'started', creditsRemaining: newCredits });
 
     // Run pipeline asynchronously with real-time updates
-    runPipeline(jobId, concept, imageFile, quality).catch(err => {
+    runPipeline(jobId, concept, imageFile, quality).catch(async (err) => {
       console.error(`❌ [PIPELINE] Job ${jobId} failed:`, err);
+      
+      // Refund credits if generation fails
+      try {
+        await usersCollection.findOneAndUpdate(
+          { _id: req.userId },
+          { $inc: { credits: CREDITS_PER_GENERATION } }
+        );
+        console.log(`💰 [CREDITS] Refunded ${CREDITS_PER_GENERATION} credit(s) due to generation failure.`);
+      } catch (refundError) {
+        console.error('❌ [CREDITS] Failed to refund credits:', refundError);
+      }
+      
       emitPipelineUpdate(jobId, 'error', 0, err.message, { error: true });
     });
 
