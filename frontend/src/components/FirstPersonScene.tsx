@@ -260,13 +260,11 @@ export const FirstPersonScene = forwardRef<FirstPersonSceneHandle, FirstPersonSc
     let debugMode = false;
     
     const onKeyDown = (event: KeyboardEvent) => {
-      // Handle Escape key even when pointer is not locked (to prevent fullscreen exit)
-      if (event.code === 'Escape') {
-        if (document.pointerLockElement === renderer.domElement) {
-          event.preventDefault();
-          event.stopPropagation();
-          document.exitPointerLock();
-        }
+      // Handle Escape key to exit pointer lock and prevent fullscreen exit
+      if (event.code === 'Escape' && document.pointerLockElement === renderer.domElement) {
+        event.preventDefault();
+        event.stopPropagation();
+        document.exitPointerLock();
         return;
       }
       
