@@ -238,12 +238,15 @@ const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 
 // Credit system configuration
-const CREDITS_PER_GENERATION = 1; // Cost per 3D generation
+// World Labs pricing: $0.80 per 1,000 credits
+// Each generation costs 1,500 credits = $1.20
+// We charge users slightly more to cover overhead and make it sustainable
+const CREDITS_PER_GENERATION = 1; // Cost per 3D generation (in our system)
 const CREDITS_PACKAGES = {
-  5: 499,   // $4.99 for 5 credits
-  10: 899,  // $8.99 for 10 credits  
-  20: 1599, // $15.99 for 20 credits
-  50: 3499, // $34.99 for 50 credits
+  5: 599,   // $5.99 for 5 credits (~$1.20/gen cost, ~$1.20/user price)
+  10: 1099, // $10.99 for 10 credits (~$1.10/gen)
+  20: 1999, // $19.99 for 20 credits (~$1.00/gen) - Best value
+  50: 4499, // $44.99 for 50 credits (~$0.90/gen) - Best value
 };
 
 // Proxy endpoint for Marble API - handles image upload and world generation
