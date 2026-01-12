@@ -1,18 +1,15 @@
 import { motion } from 'framer-motion';
 import { Home, Library, LogIn, LogOut, User, Sparkles } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { useState, useRef } from 'react';
-import { BuyCreditsCard } from './BuyCreditsModal';
+import { useState } from 'react';
 
 interface NavBarProps {
-  currentPage?: 'home' | 'library' | 'explore';
+  currentPage?: 'home' | 'library' | 'explore' | 'credits';
 }
 
 export function NavBar({ currentPage = 'home' }: NavBarProps) {
   const { dbUser, loading, signIn, signOut } = useAuth();
   const [signingIn, setSigningIn] = useState(false);
-  const [showCreditsCard, setShowCreditsCard] = useState(false);
-  const creditsButtonRef = useRef<HTMLButtonElement>(null);
 
   const handleSignIn = async () => {
     setSigningIn(true);
@@ -39,6 +36,10 @@ export function NavBar({ currentPage = 'home' }: NavBarProps) {
 
   const navigateToLibrary = () => {
     window.location.hash = '#library';
+  };
+
+  const navigateToCredits = () => {
+    window.location.hash = '#credits';
   };
 
   return (
@@ -88,13 +89,12 @@ export function NavBar({ currentPage = 'home' }: NavBarProps) {
             <div className="w-20 h-4 bg-white/10 rounded animate-pulse" />
           </div>
         ) : dbUser ? (
-          <div className="flex items-center gap-2 relative">
+          <div className="flex items-center gap-2">
             {/* Credits Balance */}
             <motion.button
-              ref={creditsButtonRef}
-              onClick={() => setShowCreditsCard(!showCreditsCard)}
+              onClick={navigateToCredits}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/20 hover:bg-purple-500/30 border border-purple-400/30 font-mono text-xs text-purple-200 transition-all ${
-                showCreditsCard ? 'bg-purple-500/40 border-purple-400/50' : ''
+                currentPage === 'credits' ? 'bg-purple-500/40 border-purple-400/50' : ''
               }`}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -102,13 +102,6 @@ export function NavBar({ currentPage = 'home' }: NavBarProps) {
               <Sparkles className="w-3 h-3" />
               <span>{dbUser.credits || 0} credits</span>
             </motion.button>
-
-            {/* Buy Credits Card */}
-            <BuyCreditsCard
-              isOpen={showCreditsCard}
-              onClose={() => setShowCreditsCard(false)}
-              anchorRef={creditsButtonRef}
-            />
 
             {/* User Info */}
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10">

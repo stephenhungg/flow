@@ -3,9 +3,10 @@ import { LoadingScreen } from './components/LoadingScreen';
 import { LandingPage } from './pages/LandingPage';
 import { ExplorePage } from './pages/ExplorePage';
 import { LibraryPage } from './pages/LibraryPage';
+import { CreditsPage } from './pages/CreditsPage';
 import { useMetaTags } from './hooks/useMetaTags';
 
-type Page = 'landing' | 'explore' | 'library';
+type Page = 'landing' | 'explore' | 'library' | 'credits';
 
 function getPageFromHash(): Page {
   const hash = window.location.hash;
@@ -14,6 +15,9 @@ function getPageFromHash(): Page {
   }
   if (hash.startsWith('#library')) {
     return 'library';
+  }
+  if (hash.startsWith('#credits')) {
+    return 'credits';
   }
   return 'landing';
 }
@@ -44,6 +48,9 @@ export default function App() {
       case 'library':
         document.title = 'flow | library';
         break;
+      case 'credits':
+        document.title = 'flow | buy credits';
+        break;
       case 'explore':
         // The explore page will handle its own title updates
         document.title = 'flow | explore';
@@ -59,11 +66,15 @@ export default function App() {
       ? 'flow | voice-guided 3d exploration'
       : currentPage === 'library'
       ? 'flow | library'
+      : currentPage === 'credits'
+      ? 'flow | buy credits'
       : 'flow | explore',
     description: currentPage === 'landing'
       ? 'Explore any concept through immersive, voice-guided 3D environments. Transform learning into an interactive visual journey with AI-powered spatial experiences.'
       : currentPage === 'library'
       ? 'Browse your saved 3D explorations and revisit your learning journey through immersive environments.'
+      : currentPage === 'credits'
+      ? 'Purchase credits to generate unlimited 3D scenes. Each generation costs 1 credit.'
       : 'Explore concepts in immersive 3D space with voice guidance.',
     image: '/og-image.svg',
     url: currentPage === 'landing'
@@ -105,6 +116,8 @@ export default function App() {
       return <ExplorePage />;
     case 'library':
       return <LibraryPage />;
+    case 'credits':
+      return <CreditsPage />;
     case 'landing':
     default:
       return <LandingPage />;
