@@ -260,6 +260,16 @@ export const FirstPersonScene = forwardRef<FirstPersonSceneHandle, FirstPersonSc
     let debugMode = false;
     
     const onKeyDown = (event: KeyboardEvent) => {
+      // Handle Escape key even when pointer is not locked (to prevent fullscreen exit)
+      if (event.code === 'Escape') {
+        if (document.pointerLockElement === renderer.domElement) {
+          event.preventDefault();
+          event.stopPropagation();
+          document.exitPointerLock();
+        }
+        return;
+      }
+      
       if (document.pointerLockElement !== renderer.domElement) return;
       
       const keys = keysRef.current;
@@ -271,7 +281,6 @@ export const FirstPersonScene = forwardRef<FirstPersonSceneHandle, FirstPersonSc
         case 'Space': keys.up = true; break;
         case 'ShiftLeft': case 'ShiftRight': keys.sprint = true; break;
         case 'ControlLeft': case 'KeyC': keys.down = true; break;
-        case 'Escape': document.exitPointerLock(); break;
         case 'KeyP': // Toggle debug mode
           debugMode = !debugMode;
           colliderMeshesRef.current.forEach(mesh => {
