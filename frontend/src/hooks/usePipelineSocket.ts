@@ -4,6 +4,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { useAuth } from '../contexts/AuthContext';
 
 export type PipelineStage = 
   | 'idle'
@@ -42,6 +43,7 @@ export interface PipelineState {
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export function usePipelineSocket() {
+  const { getIdToken } = useAuth();
   const socketRef = useRef<Socket | null>(null);
   const [state, setState] = useState<PipelineState>({
     jobId: null,
@@ -140,9 +142,20 @@ export function usePipelineSocket() {
         formData.append('quality', quality);
       }
 
-      // Pipeline doesn't require authentication - no auth headers needed
+      // Get auth token for pipeline request
+      const token = await getIdToken();
+      if (!token) {
+        throw new Error('Please sign in to generate scenes');
+      }
+
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch(`${API_URL}/api/pipeline/start`, {
         method: 'POST',
+        headers,
         body: formData,
       });
 
