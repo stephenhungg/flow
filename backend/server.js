@@ -547,6 +547,16 @@ async function creditCheckMiddleware(req, res, next) {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    // Unlimited credits for admin email
+    const ADMIN_EMAIL = 'stpnhh@gmail.com';
+    if (user.email === ADMIN_EMAIL) {
+      console.log(`✅ [CREDITS] Admin user ${user.email} - unlimited credits`);
+      req.userCredits = Infinity;
+      req.userId = user._id;
+      req.isAdmin = true;
+      return next();
+    }
+
     const credits = user.credits || 0;
     
     if (credits < CREDITS_PER_GENERATION) {
