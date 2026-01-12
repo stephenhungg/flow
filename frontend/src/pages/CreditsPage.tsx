@@ -134,20 +134,25 @@ export function CreditsPage() {
                     <motion.button
                       onClick={() => handlePurchase(pkg)}
                       disabled={isPurchasing}
-                      className={`w-full p-6 rounded-xl glass-strong text-left transition-all disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden ${
+                      className={`w-full p-6 rounded-xl glass-strong text-left transition-all disabled:opacity-50 disabled:cursor-not-allowed relative ${
                         isBestValue ? 'ring-2 ring-purple-400/50' : ''
                       }`}
                       whileHover={!isPurchasing ? { scale: 1.02, y: -2 } : {}}
                       whileTap={!isPurchasing ? { scale: 0.98 } : {}}
                     >
                       {isBestValue && (
-                        <div className="absolute top-4 right-4 px-2 py-1 rounded-full bg-purple-500/30 text-purple-200 text-xs font-mono">
+                        <motion.div
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          transition={{ delay: index * 0.1 + 0.2 }}
+                          className="absolute -top-2 -right-2 px-3 py-1 rounded-full bg-gradient-to-r from-purple-500 to-purple-600 text-white text-xs font-mono font-semibold shadow-lg border-2 border-white/20 z-10"
+                        >
                           Best Value
-                        </div>
+                        </motion.div>
                       )}
 
                       <div className="flex items-start justify-between mb-4">
-                        <div>
+                        <div className={isBestValue ? 'pr-20' : ''}>
                           <div className="flex items-center gap-2 mb-2">
                             <Sparkles className="w-5 h-5 text-purple-400" />
                             <span className="font-mono text-2xl text-white font-semibold">
