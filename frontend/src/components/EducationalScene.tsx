@@ -44,8 +44,14 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
   // Pipeline socket for real-time updates
   const pipeline = usePipelineSocket();
 
-  // Start pipeline when component mounts
+  // Start pipeline when component mounts - prevent double calls
+  const pipelineStartedRef = useRef(false);
+  
   useEffect(() => {
+    // Prevent double calls (React StrictMode in dev)
+    if (pipelineStartedRef.current) return;
+    pipelineStartedRef.current = true;
+    
     let cancelled = false;
 
     async function runPipeline() {
@@ -134,9 +140,10 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, c
     }
 
     runPipeline();
-
+    
     return () => {
       cancelled = true;
+      pipelineStartedRef.current = false; // Reset on cleanup
     };
   }, [concept, savedSplatUrl, savedOrchestration, customImageData, qualityMode]);
 

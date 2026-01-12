@@ -90,6 +90,17 @@ export function GenerationLoadingScreen({
 }: GenerationLoadingScreenProps) {
   const [terminalLines, setTerminalLines] = useState<string[]>([]);
   const [glitchText, setGlitchText] = useState(concept);
+  const [startTime] = useState(Date.now());
+  
+  // Calculate estimated time remaining based on progress
+  const getEstimatedTime = () => {
+    if (progress === 0) return '~2-3 minutes';
+    const elapsed = (Date.now() - startTime) / 1000; // seconds
+    const totalEstimate = (elapsed / progress) * 100; // total estimated seconds
+    const remaining = Math.max(0, totalEstimate - elapsed);
+    if (remaining < 60) return `~${Math.ceil(remaining)}s`;
+    return `~${Math.ceil(remaining / 60)}m`;
+  };
 
   // Glitch effect
   useEffect(() => {
@@ -220,10 +231,26 @@ export function GenerationLoadingScreen({
               transition={{ duration: 0.3 }}
             />
           </div>
-          <div className="flex justify-between mt-3 font-mono text-xs">
-            <span className="text-white/40">{Math.round(progress)}%</span>
+          <div className="flex justify-between items-center mt-3 font-mono text-xs">
+            <div className="flex items-center gap-3">
+              <span className="text-white/40">{Math.round(progress)}%</span>
+              <span className="text-white/30">•</span>
+              <span className="text-white/40">{getEstimatedTime()} remaining</span>
+            </div>
             <span className="text-white/40">{message || 'initializing...'}</span>
           </div>
+          
+          {/* Stay on page warning */}
+          <motion.div
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1 }}
+            className="mt-3 text-center"
+          >
+            <p className="text-yellow-400/60 text-[10px] font-mono">
+              ⚠️ Please stay on this page while generating
+            </p>
+          </motion.div>
         </motion.div>
 
         {/* Stage indicators */}

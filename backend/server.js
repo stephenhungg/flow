@@ -1032,68 +1032,115 @@ app.post('/api/scenes/from-url', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Download the splat file from external URL
-    console.log('📥 [SCENES] Downloading splat from external URL...');
-    const splatResponse = await fetch(externalSplatUrl);
-    if (!splatResponse.ok) {
-      throw new Error(`Failed to download splat: ${splatResponse.status} ${splatResponse.statusText}`);
-    }
+    // Check if URL is from Marble CDN - save directly instead of downloading/uploading
+    const isMarbleCdn = externalSplatUrl.includes('cdn.marble.worldlabs.ai');
     
-    const splatBuffer = Buffer.from(await splatResponse.arrayBuffer());
-    console.log(`📥 [SCENES] Downloaded splat: ${splatBuffer.length} bytes`);
-
-    // Download collider mesh if provided
-    let colliderBuffer = null;
-    if (externalColliderUrl) {
-      console.log('📥 [SCENES] Downloading collider mesh...');
-      try {
-        const colliderResponse = await fetch(externalColliderUrl);
-        if (colliderResponse.ok) {
-          colliderBuffer = Buffer.from(await colliderResponse.arrayBuffer());
-          console.log(`📥 [SCENES] Downloaded collider: ${colliderBuffer.length} bytes`);
-        } else {
-          console.warn(`⚠️ [SCENES] Failed to download collider: ${colliderResponse.status}`);
-        }
-      } catch (colliderError) {
-        console.warn(`⚠️ [SCENES] Collider download error:`, colliderError.message);
+    let vultrSplatUrl = externalSplatUrl; // Use Marble CDN URL directly
+    let vultrColliderUrl = externalColliderUrl || null;
+    let splatKey = null;
+    
+    if (!isMarbleCdn) {
+      // Only download/upload if NOT from Marble CDN (for backwards compatibility)
+      console.log('📥 [SCENES] Downloading splat from external URL (non-Marble)...');
+      const splatResponse = await fetch(externalSplatUrl);
+      if (!splatResponse.ok) {
+        throw new Error(`Failed to download splat: ${splatResponse.status} ${splatResponse.statusText}`);
       }
+      
+      const splatBuffer = Buffer.from(await splatResponse.arrayBuffer());
+      console.log(`📥 [SCENES] Downloaded splat: ${splatBuffer.length} bytes`);
+
+      // Download collider mesh if provided
+      let colliderBuffer = null;
+      if (externalColliderUrl) {
+        console.log('📥 [SCENES] Downloading collider mesh...');
+        try {
+          const colliderResponse = await fetch(externalColliderUrl);
+          if (colliderResponse.ok) {
+            colliderBuffer = Buffer.from(await colliderResponse.arrayBuffer());
+            console.log(`📥 [SCENES] Downloaded collider: ${colliderBuffer.length} bytes`);
+          } else {
+            console.warn(`⚠️ [SCENES] Failed to download collider: ${colliderResponse.status}`);
+          }
+        } catch (colliderError) {
+          console.warn(`⚠️ [SCENES] Collider download error:`, colliderError.message);
+        }
+      }
+
+      // Create scene document first to get ID
+      const scenesCollection = getScenesCollection();
+      const sceneData = {
+        title,
+        description: description || '',
+        concept,
+        creatorId: user._id,
+        creatorName: user.displayName,
+        tags: tags ? (typeof tags === 'string' ? tags.split(',') : tags) : [],
+        isPublic: isPublic === 'true' || isPublic === true || isPublic === undefined,
+        viewCount: 0,
+        worldId: worldId || null,
+        hasCollider: !!colliderBuffer,
+        thumbnailUrl: null,
+        orchestration: orchestration ? {
+          learningObjectives: orchestration.learningObjectives || [],
+          keyFacts: orchestration.keyFacts || [],
+          narrationScript: orchestration.narrationScript || '',
+          subtitleLines: orchestration.subtitleLines || [],
+          callouts: orchestration.callouts || [],
+          sources: orchestration.sources || [],
+        } : null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const insertResult = await scenesCollection.insertOne(sceneData);
+      const sceneId = insertResult.insertedId;
+
+      // Upload splat file to Vultr Object Storage
+      splatKey = generateSplatKey(user._id.toString(), sceneId.toString());
+      console.log(`📤 [SCENES] Uploading splat to Vultr: ${splatKey}`);
+      vultrSplatUrl = await uploadFile(splatBuffer, splatKey, 'application/octet-stream');
+      console.log(`✅ [SCENES] Uploaded splat to Vultr: ${vultrSplatUrl}`);
+      
+      // Upload collider mesh if available
+      if (colliderBuffer) {
+        const colliderKey = `scenes/${user._id}/${sceneId}/collider.glb`;
+        console.log(`📤 [SCENES] Uploading collider to Vultr: ${colliderKey}`);
+        vultrColliderUrl = await uploadFile(colliderBuffer, colliderKey, 'model/gltf-binary');
+        console.log(`✅ [SCENES] Uploaded collider to Vultr: ${vultrColliderUrl}`);
+      }
+    } else {
+      console.log('✅ [SCENES] Using Marble CDN URL directly (no download/upload needed):', externalSplatUrl);
+      
+      // Create scene document with Marble CDN URL
+      const scenesCollection = getScenesCollection();
+      const sceneData = {
+        title,
+        description: description || '',
+        concept,
+        creatorId: user._id,
+        creatorName: user.displayName,
+        tags: tags ? (typeof tags === 'string' ? tags.split(',') : tags) : [],
+        isPublic: isPublic === 'true' || isPublic === true || isPublic === undefined,
+        viewCount: 0,
+        worldId: worldId || null,
+        hasCollider: !!vultrColliderUrl,
+        thumbnailUrl: null,
+        orchestration: orchestration ? {
+          learningObjectives: orchestration.learningObjectives || [],
+          keyFacts: orchestration.keyFacts || [],
+          narrationScript: orchestration.narrationScript || '',
+          subtitleLines: orchestration.subtitleLines || [],
+          callouts: orchestration.callouts || [],
+          sources: orchestration.sources || [],
+        } : null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const insertResult = await scenesCollection.insertOne(sceneData);
+      const sceneId = insertResult.insertedId;
     }
-
-    // Create scene document first to get ID (without thumbnail URL yet)
-    const scenesCollection = getScenesCollection();
-    const sceneData = {
-      title,
-      description: description || '',
-      concept,
-      creatorId: user._id,
-      creatorName: user.displayName,
-      tags: tags ? (typeof tags === 'string' ? tags.split(',') : tags) : [],
-      isPublic: isPublic === 'true' || isPublic === true || isPublic === undefined,
-      viewCount: 0,
-      worldId: worldId || null,
-      hasCollider: !!colliderBuffer,
-      thumbnailUrl: null, // Will be set after upload
-      // Save educational content if provided
-      orchestration: orchestration ? {
-        learningObjectives: orchestration.learningObjectives || [],
-        keyFacts: orchestration.keyFacts || [],
-        narrationScript: orchestration.narrationScript || '',
-        subtitleLines: orchestration.subtitleLines || [],
-        callouts: orchestration.callouts || [],
-        sources: orchestration.sources || [],
-      } : null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    const insertResult = await scenesCollection.insertOne(sceneData);
-    const sceneId = insertResult.insertedId;
-
-    // Upload splat file to Vultr Object Storage
-    const splatKey = generateSplatKey(user._id.toString(), sceneId.toString());
-    console.log(`📤 [SCENES] Uploading splat to Vultr: ${splatKey}`);
-    const vultrSplatUrl = await uploadFile(splatBuffer, splatKey, 'application/octet-stream');
-    console.log(`✅ [SCENES] Uploaded splat to Vultr: ${vultrSplatUrl}`);
 
     // Upload thumbnail if provided (as actual image file, not base64 in DB)
     let vultrThumbnailUrl = null;
@@ -1109,16 +1156,7 @@ app.post('/api/scenes/from-url', authMiddleware, async (req, res) => {
       }
     }
 
-    // Upload collider mesh if available
-    let vultrColliderUrl = null;
-    if (colliderBuffer) {
-      const colliderKey = `scenes/${user._id}/${sceneId}/collider.glb`;
-      console.log(`📤 [SCENES] Uploading collider to Vultr: ${colliderKey}`);
-      vultrColliderUrl = await uploadFile(colliderBuffer, colliderKey, 'model/gltf-binary');
-      console.log(`✅ [SCENES] Uploaded collider to Vultr: ${vultrColliderUrl}`);
-    }
-
-    // Update scene with all URLs
+    // Update scene with all URLs (vultrColliderUrl already set above if needed)
     const updateData = { 
       splatUrl: vultrSplatUrl, 
       splatKey, 
