@@ -79,10 +79,10 @@ const fragmentShader = `
     vec4 sum = vec4(0.0);
     float t = 0.0;
     
-    // Enhanced vibrant sky colors with purple/blue theme
-    vec3 nightSky = vec3(0.03, 0.05, 0.12);
-    vec3 cloudColorDark = vec3(0.15, 0.12, 0.25);
-    vec3 cloudColorLight = vec3(0.35, 0.28, 0.55);
+    // Blue sky colors
+    vec3 nightSky = vec3(0.03, 0.08, 0.15);
+    vec3 cloudColorDark = vec3(0.12, 0.15, 0.25);
+    vec3 cloudColorLight = vec3(0.25, 0.35, 0.55);
     
     // Enhanced lighting direction with more color
     vec3 moonDir = normalize(vec3(0.5, 0.8, -0.3));
@@ -105,11 +105,11 @@ const fragmentShader = `
         float denOffset = cloudDensity(pos + moonDir * 0.3);
         float diff = clamp((den - denOffset) / 0.3, 0.0, 1.0);
         
-        // Enhanced cloud color with vibrant moonlight
+        // Cloud color with blue moonlight
         vec3 col = mix(cloudColorDark, cloudColorLight, diff * 0.7 + 0.3);
-        
-        // Add vibrant purple/blue rim light
-        col += vec3(0.25, 0.2, 0.4) * diff * 0.5;
+
+        // Add blue rim light
+        col += vec3(0.15, 0.2, 0.4) * diff * 0.5;
         col += vec3(0.15, 0.25, 0.45) * (1.0 - diff) * 0.3;
         
         // Fog/atmosphere
@@ -144,25 +144,25 @@ const fragmentShader = `
     
     vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.5 * ww);
     
-    // Enhanced vibrant sky gradient with purple/blue tones
-    vec3 skyColor = vec3(0.04, 0.06, 0.14);
-    // Add gradient from deep purple-blue to lighter blue
+    // Blue sky gradient
+    vec3 skyColor = vec3(0.04, 0.08, 0.16);
+    // Add gradient from deep blue to lighter blue
     float horizonGrad = (1.0 - abs(rd.y)) * 0.5;
-    skyColor += vec3(0.08, 0.12, 0.22) * horizonGrad;
-    skyColor += vec3(0.12, 0.15, 0.28) * (1.0 - rd.y) * 0.3;
-    
-    // Enhanced stars with more visibility
+    skyColor += vec3(0.06, 0.14, 0.24) * horizonGrad;
+    skyColor += vec3(0.08, 0.18, 0.32) * (1.0 - rd.y) * 0.3;
+
+    // Stars
     float stars = pow(hash(rd * 500.0), 18.0) * step(0.2, rd.y);
     skyColor += vec3(0.9, 0.92, 1.0) * stars * 0.5;
-    
-    // Enhanced moon glow with purple tint
+
+    // Moon glow with blue tint
     vec3 moonDir = normalize(vec3(0.5, 0.6, -0.3));
     float moonGlow = pow(max(0.0, dot(rd, moonDir)), 64.0);
-    skyColor += vec3(0.3, 0.25, 0.45) * moonGlow * 1.2;
-    
-    // Enhanced moon halo with color
+    skyColor += vec3(0.2, 0.3, 0.5) * moonGlow * 1.2;
+
+    // Moon halo with blue color
     float moonHalo = pow(max(0.0, dot(rd, moonDir)), 8.0);
-    skyColor += vec3(0.15, 0.18, 0.35) * moonHalo;
+    skyColor += vec3(0.15, 0.25, 0.4) * moonHalo;
     
     // Raymarch clouds
     vec4 clouds = raymarchClouds(ro, rd);

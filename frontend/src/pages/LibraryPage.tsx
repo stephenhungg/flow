@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { NavBar } from '../components/NavBar';
 import { useAuth } from '../contexts/AuthContext';
 import { listScenes, deleteScene, getMyScenes, generateSceneDescription, generateSceneThumbnail, type Scene, type PaginatedScenes } from '../lib/api';
-import { Search, Grid, User, Sparkles, X, Play, Eye, Calendar, Trash2, Upload } from 'lucide-react';
+import { Search, Grid, User, Sparkles, X, Play, Eye, Calendar, Trash2, Upload, Github, Trophy } from 'lucide-react';
 import { CloudBackground } from '../components/CloudBackground';
 import { useOutsideClick } from '../hooks/useOutsideClick';
 import { TiltedCard } from '../components/TiltedCard';
@@ -667,12 +667,49 @@ export function LibraryPage() {
           </div>
         </main>
 
-        {/* Minimal Footer */}
-        <footer className="px-6 py-6 mt-auto">
-          <div className="max-w-7xl mx-auto text-center">
-            <p className="font-mono text-[10px] text-white/20">
-              flow © 2026
-            </p>
+        {/* Footer */}
+        <footer className="relative z-10 mt-auto">
+          <div className="border-t border-white/10 py-8 px-6">
+            <div className="max-w-6xl mx-auto space-y-4">
+              {/* Hackathon Credit */}
+              <div className="flex items-center justify-center gap-2">
+                <Trophy className="w-3.5 h-3.5 text-white/40" />
+                <p className="font-mono text-xs text-white/50 tracking-wider">
+                  built at <span className="text-white/70">sb hacks xii</span>
+                </p>
+              </div>
+
+              {/* Team & Links - Single Line */}
+              <div className="flex flex-wrap items-center justify-center gap-3 text-xs font-mono">
+                <span className="text-white/30">team:</span>
+                <span className="text-white/50">Stephen Hung</span>
+                <span className="text-white/20">•</span>
+                <span className="text-white/50">Matthew Kim</span>
+                <span className="text-white/20">•</span>
+                <span className="text-white/50">Janet Phee</span>
+                <span className="text-white/20">•</span>
+                <span className="text-white/50">Brandon So</span>
+
+                <span className="text-white/20 hidden md:inline">|</span>
+
+                {/* GitHub Link */}
+                <motion.a
+                  href="https://github.com/stephenhungg/flow"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-white/50 hover:text-white transition-colors"
+                  whileHover={{ x: 2 }}
+                >
+                  <Github className="w-3.5 h-3.5" />
+                  <span>source</span>
+                </motion.a>
+              </div>
+
+              {/* Tagline */}
+              <p className="font-mono text-xs text-white/30 text-center tracking-wide">
+                voice-guided 3d exploration powered by ai
+              </p>
+            </div>
           </div>
         </footer>
       </div>
