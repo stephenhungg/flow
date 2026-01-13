@@ -280,7 +280,10 @@ export interface CreditPackage {
  * Get available credit packages
  */
 export async function getCreditPackages(): Promise<CreditPackage[]> {
-  const response = await fetch(`${API_URL}/api/credits/packages`);
+  // Add cache-busting query param to ensure fresh data
+  const response = await fetch(`${API_URL}/api/credits/packages?t=${Date.now()}`, {
+    cache: 'no-store'
+  });
   if (!response.ok) {
     throw new Error('Failed to fetch credit packages');
   }

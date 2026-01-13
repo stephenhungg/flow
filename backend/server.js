@@ -803,9 +803,9 @@ app.get('/api/credits/packages', (req, res) => {
     priceCents: amount,
   }));
 
-  // Cache credit packages for 1 hour (rarely change)
+  // Cache credit packages for 5 minutes (can change when pricing updates)
   res.set({
-    'Cache-Control': 'public, max-age=3600'
+    'Cache-Control': 'public, max-age=300, must-revalidate'
   });
 
   res.json({ packages });
