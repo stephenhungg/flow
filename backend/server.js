@@ -559,8 +559,15 @@ app.post('/api/auth/verify', async (req, res) => {
     const updatedUser = result.value || result;
     
     // Check if admin user
-    const userEmail = updatedUser.email?.toLowerCase();
+    const userEmail = updatedUser.email?.toLowerCase().trim();
     const isAdmin = ADMIN_EMAILS.includes(userEmail);
+    
+    // Debug logging for admin check
+    if (userEmail) {
+      console.log(`🔍 [AUTH] Checking admin status for: ${userEmail}`);
+      console.log(`🔍 [AUTH] ADMIN_EMAILS:`, ADMIN_EMAILS);
+      console.log(`🔍 [AUTH] Is admin:`, isAdmin);
+    }
     
     res.json({
       user: {
@@ -592,8 +599,15 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
     }
 
     // Check if admin user
-    const userEmail = user.email?.toLowerCase();
+    const userEmail = user.email?.toLowerCase().trim();
     const isAdmin = ADMIN_EMAILS.includes(userEmail);
+    
+    // Debug logging for admin check
+    if (userEmail) {
+      console.log(`🔍 [AUTH] /me - Checking admin status for: ${userEmail}`);
+      console.log(`🔍 [AUTH] /me - ADMIN_EMAILS:`, ADMIN_EMAILS);
+      console.log(`🔍 [AUTH] /me - Is admin:`, isAdmin);
+    }
     
     res.json({
       _id: user._id.toString(),
