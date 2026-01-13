@@ -220,6 +220,13 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, s
         setWorldId(pipeline.worldId);
       }
 
+      // Set thumbnail from pipeline (generated image)
+      if (pipeline.thumbnailBase64) {
+        const thumbnailDataUrl = `data:image/png;base64,${pipeline.thumbnailBase64}`;
+        setThumbnailDataUrl(thumbnailDataUrl);
+        console.log('✅ [PIPELINE] Thumbnail set from pipeline');
+      }
+
       setMode('loading_scene');
 
       // Generate orchestration if not already done
@@ -229,7 +236,7 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, s
           .catch(err => console.warn('⚠️ Orchestration failed:', err));
       }
     }
-  }, [pipeline.stage, pipeline.splatUrl, pipeline.colliderMeshUrl, pipeline.worldId, concept, orchestration]);
+  }, [pipeline.stage, pipeline.splatUrl, pipeline.colliderMeshUrl, pipeline.worldId, pipeline.thumbnailBase64, concept, orchestration]);
 
   // Auto-save to library when generation completes (defined before useEffect that uses it)
   const autoSaveToLibrary = useCallback(async () => {
