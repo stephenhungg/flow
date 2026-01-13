@@ -20,6 +20,7 @@ export function LandingPage() {
   const [isZooming, setIsZooming] = useState(false);
   const [showOverlay, setShowOverlay] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const isListeningRef = useRef(false);
 
   // Advanced options
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -68,12 +69,13 @@ export function LandingPage() {
     };
 
     recognition.onend = () => {
-      // If we're still supposed to be listening, restart
-      if (isListening) {
+      // Use ref to check current listening state to avoid stale closure
+      if (isListeningRef.current && recognitionRef.current === recognition) {
         try {
           recognition.start();
         } catch (e) {
           console.error('Error restarting recognition:', e);
+          setIsListening(false);
         }
       }
     };
@@ -91,12 +93,17 @@ export function LandingPage() {
   useEffect(() => {
     if (!recognitionRef.current) return;
 
+    // Update ref to track current listening state
+    isListeningRef.current = isListening;
+
     if (isListening) {
       setVoiceTranscript('');
       try {
         recognitionRef.current.start();
       } catch (e) {
         console.error('Error starting recognition:', e);
+        // If start fails, reset listening state
+        setIsListening(false);
       }
     } else {
       try {

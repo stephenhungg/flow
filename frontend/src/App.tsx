@@ -79,7 +79,7 @@ export default function App() {
       : currentPage === 'credits'
       ? 'Purchase credits to generate unlimited 3D scenes. Each generation costs 1 credit.'
       : 'Explore concepts in immersive 3D space with voice guidance.',
-    image: '/og-image.svg',
+    image: 'https://flow.app/og-image.png',
     url: currentPage === 'landing'
       ? window.location.origin
       : `${window.location.origin}${window.location.pathname}${window.location.hash}`,

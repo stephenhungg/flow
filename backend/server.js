@@ -1088,7 +1088,7 @@ app.get('/s/:id', async (req, res) => {
 
     const frontendUrl = process.env.FRONTEND_URL || 'https://flow.stephenhung.me';
     const sceneUrl = `${frontendUrl}/#explore?q=${encodeURIComponent(scene.concept)}&sceneId=${sceneId}`;
-    const imageUrl = scene.thumbnailUrl || `${frontendUrl}/og-image.svg`;
+    const imageUrl = scene.thumbnailUrl || `${frontendUrl}/og-image.png`;
     const title = `${scene.title} | flow`;
     const description = scene.description || `Explore ${scene.concept} through an immersive, voice-guided 3D environment.`;
 
