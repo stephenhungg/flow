@@ -2061,21 +2061,16 @@ async function runPipeline(jobId, concept, imageFile) {
   const GEMINI_API_KEY = process.env.VITE_GEMINI_API_KEY;
   
   try {
-    // Stage 1: Orchestrating (5%)
+    // Stage 1: Orchestrating (5-15%) - Quick UI updates, no artificial delays
     emitPipelineUpdate(jobId, 'orchestrating', 5, 'Analyzing your concept...', {
       details: 'Understanding the scene requirements'
     });
-    await sleep(500);
-
     emitPipelineUpdate(jobId, 'orchestrating', 10, 'Generating educational content...', {
       details: 'Creating learning objectives and key facts'
     });
-    await sleep(500);
-
     emitPipelineUpdate(jobId, 'orchestrating', 15, 'Preparing scene parameters...', {
       details: 'Optimizing for 3D world generation'
     });
-    await sleep(500);
 
     // Stage 2: Generating Image (20-40%)
     emitPipelineUpdate(jobId, 'generating_image', 20, 'Initializing image generation...', {
@@ -2446,16 +2441,13 @@ Natural lighting, realistic textures, explorable space with clear pathways and i
     // Get stored data
     const jobData = pipelineJobs.get(jobId) || {};
 
-    // Stage 4: Loading Splat (90-100%)
+    // Stage 4: Loading Splat (90-100%) - Quick UI updates, no artificial delays
     emitPipelineUpdate(jobId, 'loading_splat', 90, 'Preparing 3D scene for viewing...', {
       details: 'Downloading gaussian splat data'
     });
-    await sleep(1000);
-
     emitPipelineUpdate(jobId, 'loading_splat', 95, 'Initializing WebGL renderer...', {
       details: 'Setting up interactive environment'
     });
-    await sleep(500);
 
     // Prepare thumbnail - prefer Gemini-generated image, fallback to image buffer (uploaded image)
     const thumbnailBase64 = jobData.generatedImageBase64 || (imageBuffer ? imageBuffer.toString('base64') : null);
