@@ -54,7 +54,7 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, s
   
   // Reset auto-save flag when starting a new generation
   useEffect(() => {
-    if (pipeline.stage === 'idle' || pipeline.stage === 'generating') {
+    if (pipeline.stage === 'idle' || pipeline.stage === 'orchestrating') {
       hasAutoSavedRef.current = false;
     }
   }, [pipeline.stage]);
@@ -481,15 +481,6 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, s
           </AnimatePresence>
 
           <div className="absolute top-6 right-6 flex gap-2 z-50">
-            <motion.button
-              onClick={() => setShowSaveModal(true)}
-              className="glass px-4 py-2 rounded-full font-mono text-sm text-white hover:bg-white/30 transition-colors"
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 1.4, duration: 0.6, ease: 'easeOut' }}
-            >
-              save to library
-            </motion.button>
             {onExit && (
               <motion.button
                 onClick={handleCancel}
@@ -619,15 +610,6 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, s
         </motion.div>
 
       <div className="absolute top-6 right-6 flex gap-2 z-50">
-        <motion.button
-          onClick={() => setShowSaveModal(true)}
-          className="glass px-4 py-2 rounded-full font-mono text-sm text-white hover:bg-white/30 transition-colors"
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1.4, duration: 0.6, ease: 'easeOut' }}
-        >
-          save to library
-        </motion.button>
         {onExit && (
           <motion.button
             onClick={onExit}
