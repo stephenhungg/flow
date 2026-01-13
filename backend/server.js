@@ -1400,7 +1400,7 @@ app.post('/api/scenes/:id/orchestration', authMiddleware, async (req, res) => {
 
 /**
  * GET /api/proxy/splat
- * Proxy splat files from Vultr to avoid CORS issues
+ * Proxy splat files from Vultr or Marble CDN to avoid CORS issues
  */
 app.get('/api/proxy/splat', async (req, res) => {
   try {
@@ -1410,9 +1410,10 @@ app.get('/api/proxy/splat', async (req, res) => {
       return res.status(400).json({ error: 'URL parameter required' });
     }
 
-    // Validate it's a Vultr URL
-    if (!url.includes('vultrobjects.com')) {
-      return res.status(400).json({ error: 'Invalid URL - must be Vultr Object Storage' });
+    // Validate it's a Vultr or Marble CDN URL
+    const isValidUrl = url.includes('vultrobjects.com') || url.includes('cdn.marble.worldlabs.ai');
+    if (!isValidUrl) {
+      return res.status(400).json({ error: 'Invalid URL - must be Vultr Object Storage or Marble CDN' });
     }
 
     console.log('🔄 [PROXY] Fetching splat from:', url);

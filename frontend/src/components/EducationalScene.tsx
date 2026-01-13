@@ -208,7 +208,9 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, s
   useEffect(() => {
     if (pipeline.stage === 'complete' && pipeline.splatUrl) {
       console.log('✅ [PIPELINE] Pipeline complete, splat URL:', pipeline.splatUrl);
-      setSplatUrl(pipeline.splatUrl);
+      // Proxy the URL to avoid CORS issues with Marble CDN
+      const proxiedUrl = getProxiedSplatUrl(pipeline.splatUrl);
+      setSplatUrl(proxiedUrl);
 
       // Store collider and world info
       if (pipeline.colliderMeshUrl) {

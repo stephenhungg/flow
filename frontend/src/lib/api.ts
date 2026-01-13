@@ -221,11 +221,13 @@ export async function saveSceneOrchestration(
 
 /**
  * Get proxied splat URL to bypass CORS
- * Use this when loading splats from Vultr Object Storage
+ * Use this when loading splats from Vultr Object Storage or Marble CDN
  */
 export function getProxiedSplatUrl(originalUrl: string): string {
-  if (!originalUrl.includes('vultrobjects.com')) {
-    return originalUrl; // Not a Vultr URL, return as-is
+  // Proxy external URLs (Vultr or Marble CDN) to avoid CORS issues
+  const needsProxy = originalUrl.includes('vultrobjects.com') || originalUrl.includes('cdn.marble.worldlabs.ai');
+  if (!needsProxy) {
+    return originalUrl; // Local or same-origin URL, return as-is
   }
   return `${API_URL}/api/proxy/splat?url=${encodeURIComponent(originalUrl)}`;
 }
