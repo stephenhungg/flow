@@ -534,21 +534,23 @@ app.post('/api/auth/verify', async (req, res) => {
 
     const usersCollection = getUsersCollection();
     
-    // Upsert user
-    const user = {
+    // Upsert user - only update fields that should change, preserve credits
+    const userUpdate = {
       firebaseUid: decodedToken.uid,
       email: decodedToken.email || '',
       displayName: decodedToken.name || decodedToken.email?.split('@')[0] || 'User',
       photoURL: decodedToken.picture || null,
-      credits: 0, // Initialize credits to 0
       updatedAt: new Date(),
     };
 
     const result = await usersCollection.findOneAndUpdate(
       { firebaseUid: decodedToken.uid },
       { 
-        $set: user,
-        $setOnInsert: { createdAt: new Date() }
+        $set: userUpdate,
+        $setOnInsert: { 
+          createdAt: new Date(),
+          credits: 0 // Only set credits to 0 on initial creation
+        }
       },
       { upsert: true, returnDocument: 'after' }
     );
