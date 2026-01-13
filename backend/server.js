@@ -1217,6 +1217,7 @@ TECHNICAL:
 /**
  * POST /api/admin/generate-missing-thumbnails
  * Batch generate thumbnails for all scenes missing them
+ * Query param ?regenerate=true to regenerate ALL thumbnails (including existing ones)
  * Admin-only endpoint
  */
 app.post('/api/admin/generate-missing-thumbnails', authMiddleware, async (req, res) => {
@@ -1242,20 +1243,56 @@ app.post('/api/admin/generate-missing-thumbnails', authMiddleware, async (req, r
     }
 
     const scenesCollection = getScenesCollection();
+    const regenerate = req.query.regenerate === 'true';
     
-    // Find all scenes without thumbnails
-    const scenesWithoutThumbnails = await scenesCollection.find({
-      $or: [
-        { thumbnailUrl: null },
-        { thumbnailUrl: { $exists: false } }
-      ]
-    }).toArray();
+    let scenesToProcess = [];
+    
+    if (regenerate) {
+      // Find ALL scenes and delete existing thumbnails first
+      const allScenes = await scenesCollection.find({}).toArray();
+      console.log(`🎨 [BATCH] Regenerating thumbnails for ALL ${allScenes.length} scenes`);
+      
+      // Delete existing thumbnails from storage
+      let deletedCount = 0;
+      for (const scene of allScenes) {
+        if (scene.thumbnailUrl) {
+          try {
+            // Extract key from URL (format: https://bucket.hostname/key)
+            const url = scene.thumbnailUrl;
+            if (url.includes('/scenes/')) {
+              const keyIndex = url.indexOf('/scenes/');
+              const key = url.substring(keyIndex + 1); // Remove leading slash
+              await deleteFile(key);
+              deletedCount++;
+            }
+          } catch (error) {
+            console.warn(`   ⚠️  Could not delete thumbnail: ${scene.thumbnailUrl}`);
+          }
+        }
+      }
+      console.log(`🗑️  [BATCH] Deleted ${deletedCount} existing thumbnails from storage`);
+      
+      // Clear thumbnail URLs in database
+      await scenesCollection.updateMany(
+        { thumbnailUrl: { $exists: true, $ne: null } },
+        { $set: { thumbnailUrl: null } }
+      );
+      
+      scenesToProcess = allScenes;
+    } else {
+      // Find only scenes without thumbnails
+      scenesToProcess = await scenesCollection.find({
+        $or: [
+          { thumbnailUrl: null },
+          { thumbnailUrl: { $exists: false } }
+        ]
+      }).toArray();
+      console.log(`🎨 [BATCH] Found ${scenesToProcess.length} scenes without thumbnails`);
+    }
 
-    console.log(`🎨 [BATCH] Found ${scenesWithoutThumbnails.length} scenes without thumbnails`);
-
-    if (scenesWithoutThumbnails.length === 0) {
+    if (scenesToProcess.length === 0) {
       return res.json({ 
-        message: 'All scenes already have thumbnails',
+        message: regenerate ? 'No scenes found' : 'All scenes already have thumbnails',
         processed: 0,
         succeeded: 0,
         failed: 0
@@ -1264,8 +1301,10 @@ app.post('/api/admin/generate-missing-thumbnails', authMiddleware, async (req, r
 
     // Return immediately and process in background
     res.json({ 
-      message: `Started generating thumbnails for ${scenesWithoutThumbnails.length} scenes`,
-      total: scenesWithoutThumbnails.length
+      message: regenerate 
+        ? `Started regenerating thumbnails for ${scenesToProcess.length} scenes`
+        : `Started generating thumbnails for ${scenesToProcess.length} scenes`,
+      total: scenesToProcess.length
     });
 
     // Process in background
@@ -1277,7 +1316,7 @@ app.post('/api/admin/generate-missing-thumbnails', authMiddleware, async (req, r
       let succeeded = 0;
       let failed = 0;
 
-      for (const scene of scenesWithoutThumbnails) {
+      for (const scene of scenesToProcess) {
         try {
           console.log(`🎨 [BATCH] Generating thumbnail for scene ${scene._id}: ${scene.concept || scene.title}`);
 
