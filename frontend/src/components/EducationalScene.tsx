@@ -35,6 +35,7 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, s
   const [thumbnailDataUrl, setThumbnailDataUrl] = useState<string | null>(null);
   const useNewLoadingScreen = true;
   const sceneRef = useRef<FirstPersonSceneHandle | null>(null);
+  const hasAutoSavedRef = useRef(false); // Track if we've already auto-saved this generation
 
   // Callback for NarrationOverlay to get screenshot
   const getScreenshot = useCallback(() => {
@@ -50,6 +51,13 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, s
   // Start pipeline when component mounts - prevent double calls
   const pipelineStartedRef = useRef(false);
   const effectIdRef = useRef(0);
+  
+  // Reset auto-save flag when starting a new generation
+  useEffect(() => {
+    if (pipeline.stage === 'idle' || pipeline.stage === 'generating') {
+      hasAutoSavedRef.current = false;
+    }
+  }, [pipeline.stage]);
   
   useEffect(() => {
     // Prevent double calls (React StrictMode in dev)
@@ -246,6 +254,12 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, s
       return;
     }
 
+    // Don't auto-save if we've already auto-saved this generation
+    if (hasAutoSavedRef.current) {
+      console.log('⏭️ [AUTO-SAVE] Skipping - already auto-saved');
+      return;
+    }
+
     if (!pipeline.splatUrl) {
       console.warn('⚠️ [AUTO-SAVE] No splat URL available');
       return;
@@ -296,6 +310,8 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, s
       });
 
       console.log('✅ [AUTO-SAVE] World saved to library:', sceneData._id);
+      // Mark as saved to prevent duplicate saves
+      hasAutoSavedRef.current = true;
     } catch (error) {
       console.error('❌ [AUTO-SAVE] Failed to save:', error);
       // Don't show error to user - auto-save is best-effort
