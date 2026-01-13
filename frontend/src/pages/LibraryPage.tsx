@@ -275,18 +275,6 @@ export function LibraryPage() {
     >
       {/* Cloud Background */}
       <CloudBackground />
-      
-      {/* Enhanced gradient overlay for depth */}
-      <div 
-        className="fixed inset-0 pointer-events-none z-[1]"
-        style={{
-          background: `
-            radial-gradient(ellipse at top, rgba(139, 92, 246, 0.08) 0%, transparent 50%),
-            radial-gradient(ellipse at bottom, rgba(59, 130, 246, 0.06) 0%, transparent 50%),
-            linear-gradient(180deg, transparent 0%, rgba(10, 11, 26, 0.3) 100%)
-          `
-        }}
-      />
 
       {/* NavBar Pill */}
       <NavBar currentPage="library" />
