@@ -204,16 +204,34 @@ app.use(cors(corsOptions));
  */
 app.post('/api/credits/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   if (!stripe || !STRIPE_WEBHOOK_SECRET) {
+    console.error('❌ [STRIPE] Webhook not configured - stripe:', !!stripe, 'secret:', !!STRIPE_WEBHOOK_SECRET);
     return res.status(500).json({ error: 'Stripe webhook not configured' });
   }
 
   const sig = req.headers['stripe-signature'];
-  let event;
+  
+  // Debug logging (remove in production if needed)
+  console.log('🔔 [STRIPE] Webhook received');
+  console.log('   Signature header present:', !!sig);
+  console.log('   Body type:', typeof req.body);
+  console.log('   Body is buffer:', Buffer.isBuffer(req.body));
+  console.log('   Body length:', req.body?.length);
 
+  if (!sig) {
+    console.error('❌ [STRIPE] No stripe-signature header found');
+    return res.status(400).send('Webhook Error: No signature header');
+  }
+
+  let event;
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, STRIPE_WEBHOOK_SECRET);
+    // Ensure body is a Buffer (raw body)
+    const body = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body);
+    event = stripe.webhooks.constructEvent(body, sig, STRIPE_WEBHOOK_SECRET);
+    console.log('✅ [STRIPE] Webhook signature verified, event type:', event.type);
   } catch (err) {
     console.error('❌ [STRIPE] Webhook signature verification failed:', err.message);
+    console.error('   Error type:', err.type);
+    console.error('   Signature header:', sig?.substring(0, 20) + '...');
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
@@ -274,7 +292,10 @@ const handleMulterError = (err, req, res, next) => {
   next(err);
 };
 
-const MARBLE_API_KEY = process.env.VITE_MARBLE_API_KEY || '06XjKizwFxHRPaaUrTg1bmPtPql3QMhw';
+const MARBLE_API_KEY = process.env.VITE_MARBLE_API_KEY;
+if (!MARBLE_API_KEY) {
+  console.error('❌ [MARBLE] VITE_MARBLE_API_KEY not set - Marble API will not work');
+}
 // Correct Marble API endpoints (from https://worldlabs-api-reference.mintlify.app/api)
 const MARBLE_API_BASE = 'https://api.worldlabs.ai';
 const MARBLE_GENERATE_ENDPOINT = `${MARBLE_API_BASE}/marble/v1/worlds:generate`;
@@ -2272,40 +2293,83 @@ Natural lighting, realistic textures, explorable space with clear pathways and i
 
         console.log('✅ [PIPELINE] World generation complete! world_id:', worldId);
 
-        // Fetch the world to get splat URLs
-        const worldResponse = await fetch(`${MARBLE_WORLDS_ENDPOINT}/${worldId}`, {
-          headers: {
-            'WLT-Api-Key': MARBLE_API_KEY_LOCAL
+        // Small delay to ensure assets are ready (world might be created but assets still processing)
+        await sleep(2000);
+
+        // Fetch the world to get splat URLs - retry if assets are null
+        let worldData = null;
+        let retryCount = 0;
+        const maxRetries = 5;
+        
+        while (retryCount < maxRetries) {
+          const worldResponse = await fetch(`${MARBLE_WORLDS_ENDPOINT}/${worldId}`, {
+            headers: {
+              'WLT-Api-Key': MARBLE_API_KEY_LOCAL
+            }
+          });
+
+          if (!worldResponse.ok) {
+            throw new Error(`Failed to fetch world: ${worldResponse.status}`);
           }
-        });
 
-        if (!worldResponse.ok) {
-          throw new Error(`Failed to fetch world: ${worldResponse.status}`);
+          worldData = await worldResponse.json();
+          
+          // Log world data structure for debugging
+          console.log('📦 [PIPELINE] World data keys:', Object.keys(worldData));
+          console.log('📦 [PIPELINE] World assets:', worldData.assets ? 'exists' : 'null');
+          
+          // If assets exist, break out of retry loop
+          if (worldData.assets) {
+            console.log('📦 [PIPELINE] Assets keys:', Object.keys(worldData.assets));
+            if (worldData.assets.splats) {
+              console.log('📦 [PIPELINE] Splats keys:', Object.keys(worldData.assets.splats));
+            }
+            break;
+          }
+          
+          // If assets are null, wait and retry
+          retryCount++;
+          if (retryCount < maxRetries) {
+            console.log(`⏳ [PIPELINE] Assets not ready yet, retrying (${retryCount}/${maxRetries})...`);
+            await sleep(3000);
+          }
         }
-
-        const worldData = await worldResponse.json();
         
-        // Log full assets structure for debugging
-        console.log('📦 [PIPELINE] World assets structure:', JSON.stringify(worldData.assets, null, 2));
+        // Try multiple paths to get splat URL
+        // Check operation response first (might contain splat URL directly)
+        const responseSplatUrl = statusData.response?.splat_url || 
+                                 statusData.response?.assets?.splats?.spz_urls?.full_res ||
+                                 statusData.response?.world?.assets?.splats?.spz_urls?.full_res;
         
-        // Get best available splat URL (prefer full res for quality)
-        splatUrl = worldData.assets?.splats?.spz_urls?.full_res || 
-                   worldData.assets?.splats?.spz_urls?.['500k'] ||
-                   worldData.assets?.splats?.spz_urls?.['100k'];
+        // Then check world data assets
+        const worldSplatUrl = worldData?.assets?.splats?.spz_urls?.full_res || 
+                              worldData?.assets?.splats?.spz_urls?.['500k'] ||
+                              worldData?.assets?.splats?.spz_urls?.['100k'] ||
+                              worldData?.splats?.spz_urls?.full_res ||
+                              worldData?.splat_url ||
+                              worldData?.assets?.splat_url;
+        
+        // Use response URL if available, otherwise world URL
+        splatUrl = responseSplatUrl || worldSplatUrl;
 
         // Get collider mesh URL for physics - try multiple possible paths
-        const colliderMeshUrl = worldData.assets?.meshes?.glb_urls?.collider ||
-                                worldData.assets?.meshes?.collider_glb_url ||
-                                worldData.assets?.collider_mesh?.url ||
-                                worldData.assets?.collider?.glb_url ||
+        const colliderMeshUrl = worldData?.assets?.meshes?.glb_urls?.collider ||
+                                worldData?.assets?.meshes?.collider_glb_url ||
+                                worldData?.assets?.collider_mesh?.url ||
+                                worldData?.assets?.collider?.glb_url ||
+                                worldData?.collider_mesh?.url ||
                                 null;
         
         // Get low-res splat for faster preview loading
-        const splatUrlLowRes = worldData.assets?.splats?.spz_urls?.['500k'] || 
-                               worldData.assets?.splats?.spz_urls?.['100k'] || null;
+        const splatUrlLowRes = worldData?.assets?.splats?.spz_urls?.['500k'] || 
+                               worldData?.assets?.splats?.spz_urls?.['100k'] || null;
 
         if (!splatUrl) {
-          throw new Error('World generated but no splat URL found');
+          // Log full world data for debugging (truncated)
+          const worldDataStr = JSON.stringify(worldData, null, 2);
+          console.error('❌ [PIPELINE] Full world data (first 2000 chars):', worldDataStr.substring(0, 2000));
+          console.error('❌ [PIPELINE] Operation response keys:', statusData.response ? Object.keys(statusData.response) : 'no response');
+          throw new Error('World generated but no splat URL found. World assets may still be processing.');
         }
 
         console.log('✅ [PIPELINE] Splat URL retrieved:', splatUrl);
