@@ -800,6 +800,11 @@ app.get('/api/credits/packages', (req, res) => {
     priceCents: amount,
   }));
 
+  // Cache credit packages for 1 hour (rarely change)
+  res.set({
+    'Cache-Control': 'public, max-age=3600'
+  });
+
   res.json({ packages });
 });
 
@@ -828,6 +833,12 @@ app.get('/api/scenes', async (req, res) => {
       .toArray();
 
     const total = await scenesCollection.countDocuments({ isPublic: true });
+
+    // Cache public scenes list for 5 minutes (data changes infrequently)
+    res.set({
+      'Cache-Control': 'public, max-age=300, stale-while-revalidate=600',
+      'ETag': `"scenes-${page}-${limit}-${total}"`
+    });
 
     res.json({
       scenes: scenes.map(scene => ({
@@ -1023,6 +1034,12 @@ app.get('/api/scenes/:id', async (req, res) => {
       { $inc: { viewCount: 1 } }
     );
 
+    // Cache scene data for 1 hour (can use stale-while-revalidate for better UX)
+    res.set({
+      'Cache-Control': 'public, max-age=3600, stale-while-revalidate=7200',
+      'ETag': `"scene-${sceneId}-${scene.updatedAt?.getTime() || scene.createdAt.getTime()}"`
+    });
+
     res.json({
       _id: scene._id.toString(),
       title: scene.title,
@@ -1043,6 +1060,85 @@ app.get('/api/scenes/:id', async (req, res) => {
   } catch (error) {
     console.error('❌ [SCENES] Get error:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /s/:id
+ * Open Graph endpoint for scene sharing
+ * Serves HTML with meta tags for social media previews
+ */
+app.get('/s/:id', async (req, res) => {
+  try {
+    const sceneId = req.params.id;
+    
+    if (!ObjectId.isValid(sceneId)) {
+      return res.status(400).send('Invalid scene ID');
+    }
+
+    const scenesCollection = getScenesCollection();
+    const scene = await scenesCollection.findOne({ 
+      _id: new ObjectId(sceneId),
+      isPublic: true 
+    });
+
+    if (!scene) {
+      return res.status(404).send('Scene not found');
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL || 'https://flow.stephenhung.me';
+    const sceneUrl = `${frontendUrl}/#explore?q=${encodeURIComponent(scene.concept)}&sceneId=${sceneId}`;
+    const imageUrl = scene.thumbnailUrl || `${frontendUrl}/og-image.svg`;
+    const title = `${scene.title} | flow`;
+    const description = scene.description || `Explore ${scene.concept} through an immersive, voice-guided 3D environment.`;
+
+    // Serve HTML with Open Graph meta tags
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="${sceneUrl}">
+  <meta property="og:title" content="${title}">
+  <meta property="og:description" content="${description}">
+  <meta property="og:image" content="${imageUrl}">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="flow">
+  
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="${sceneUrl}">
+  <meta name="twitter:title" content="${title}">
+  <meta name="twitter:description" content="${description}">
+  <meta name="twitter:image" content="${imageUrl}">
+  
+  <!-- Redirect to actual scene -->
+  <meta http-equiv="refresh" content="0; url=${sceneUrl}">
+  <link rel="canonical" href="${sceneUrl}">
+  
+  <script>
+    window.location.href = "${sceneUrl}";
+  </script>
+</head>
+<body>
+  <p>Redirecting to <a href="${sceneUrl}">${title}</a>...</p>
+</body>
+</html>`;
+
+    res.set({
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'public, max-age=3600'
+    });
+    
+    res.send(html);
+  } catch (error) {
+    console.error('❌ [OG] Open Graph error:', error);
+    res.status(500).send('Internal server error');
   }
 });
 
@@ -1767,6 +1863,11 @@ app.get('/api/users/:id/scenes', async (req, res) => {
       .sort({ createdAt: -1 })
       .toArray();
 
+    // Cache user scenes for 2 minutes
+    res.set({
+      'Cache-Control': 'public, max-age=120, stale-while-revalidate=300'
+    });
+
     res.json({
       scenes: scenes.map(scene => ({
         _id: scene._id.toString(),
@@ -2065,12 +2166,16 @@ async function runPipeline(jobId, concept, imageFile) {
     emitPipelineUpdate(jobId, 'orchestrating', 5, 'Analyzing your concept...', {
       details: 'Understanding the scene requirements'
     });
+
     emitPipelineUpdate(jobId, 'orchestrating', 10, 'Generating educational content...', {
       details: 'Creating learning objectives and key facts'
     });
+    await sleep(500);
+
     emitPipelineUpdate(jobId, 'orchestrating', 15, 'Preparing scene parameters...', {
       details: 'Optimizing for 3D world generation'
     });
+    await sleep(500);
 
     // Stage 2: Generating Image (20-40%)
     emitPipelineUpdate(jobId, 'generating_image', 20, 'Initializing image generation...', {
@@ -2441,13 +2546,16 @@ Natural lighting, realistic textures, explorable space with clear pathways and i
     // Get stored data
     const jobData = pipelineJobs.get(jobId) || {};
 
-    // Stage 4: Loading Splat (90-100%) - Quick UI updates, no artificial delays
+    // Stage 4: Loading Splat (90-100%)
     emitPipelineUpdate(jobId, 'loading_splat', 90, 'Preparing 3D scene for viewing...', {
       details: 'Downloading gaussian splat data'
     });
+    await sleep(1000);
+
     emitPipelineUpdate(jobId, 'loading_splat', 95, 'Initializing WebGL renderer...', {
       details: 'Setting up interactive environment'
     });
+    await sleep(500);
 
     // Prepare thumbnail - prefer Gemini-generated image, fallback to image buffer (uploaded image)
     const thumbnailBase64 = jobData.generatedImageBase64 || (imageBuffer ? imageBuffer.toString('base64') : null);
