@@ -50,6 +50,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (response.ok) {
             const userData = await response.json();
+            // Convert string 'Infinity' back to Infinity for admin users
+            if (userData.credits === 'Infinity') {
+              userData.credits = Infinity;
+            }
             setDbUser(userData);
           }
         } catch (error) {

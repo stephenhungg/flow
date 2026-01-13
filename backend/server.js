@@ -576,7 +576,8 @@ app.post('/api/auth/verify', async (req, res) => {
         email: updatedUser.email,
         displayName: updatedUser.displayName,
         photoURL: updatedUser.photoURL,
-        credits: isAdmin ? Infinity : (updatedUser.credits || 0),
+        // JSON doesn't support Infinity, so send as string for admin users
+        credits: isAdmin ? 'Infinity' : (updatedUser.credits || 0),
       }
     });
   } catch (error) {
@@ -615,7 +616,8 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
       email: user.email,
       displayName: user.displayName,
       photoURL: user.photoURL,
-      credits: isAdmin ? Infinity : (user.credits || 0),
+      // JSON doesn't support Infinity, so send as string for admin users
+      credits: isAdmin ? 'Infinity' : (user.credits || 0),
     });
   } catch (error) {
     console.error('❌ [AUTH] Get me error:', error);
@@ -649,7 +651,7 @@ async function creditCheckMiddleware(req, res, next) {
     }
 
     // Unlimited credits for admin emails (check both email and Firebase UID for security)
-    const userEmail = user.email?.toLowerCase();
+    const userEmail = user.email?.toLowerCase().trim();
     const isAdminEmail = ADMIN_EMAILS.includes(userEmail);
     
     // Additional check: verify Firebase UID matches (prevents email spoofing)

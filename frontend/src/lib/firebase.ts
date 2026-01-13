@@ -44,6 +44,10 @@ export async function signInWithGoogle() {
 
       if (response.ok) {
         const data = await response.json();
+        // Convert string 'Infinity' back to Infinity for admin users
+        if (data.user?.credits === 'Infinity') {
+          data.user.credits = Infinity;
+        }
         return { user: result.user, dbUser: data.user };
       } else {
         // Backend failed but Firebase auth succeeded
