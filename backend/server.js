@@ -2111,6 +2111,13 @@ Make this look like a frame from a Terrence Malick or Denis Villeneuve film - be
           
           // Send generated image to frontend immediately!
           const generatedImageBase64 = imagePart.inlineData.data;
+          
+          // Store Gemini-generated image for thumbnail
+          pipelineJobs.set(jobId, {
+            ...pipelineJobs.get(jobId),
+            generatedImageBase64, // Store for thumbnail
+          });
+          
           emitPipelineUpdate(jobId, 'generating_image', 35, 'Image generated successfully!', {
             details: 'Your scene has been visualized',
             generatedImage: generatedImageBase64, // Send the image!
@@ -2411,8 +2418,8 @@ Natural lighting, realistic textures, explorable space with clear pathways and i
     });
     await sleep(500);
 
-    // Prepare thumbnail from original image buffer
-    const thumbnailBase64 = imageBuffer ? imageBuffer.toString('base64') : null;
+    // Prepare thumbnail - prefer Gemini-generated image, fallback to image buffer (uploaded image)
+    const thumbnailBase64 = jobData.generatedImageBase64 || (imageBuffer ? imageBuffer.toString('base64') : null);
 
     // Complete!
     pipelineJobs.set(jobId, {
