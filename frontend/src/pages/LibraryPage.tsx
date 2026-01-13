@@ -276,6 +276,17 @@ export function LibraryPage() {
       {/* Cloud Background */}
       <CloudBackground />
 
+      {/* Vignette */}
+      <motion.div
+        className="fixed inset-0 pointer-events-none z-[1]"
+        style={{
+          background: 'radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.4) 70%, rgba(0,0,0,0.9) 100%)',
+        }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.8 }}
+      />
+
       {/* NavBar Pill */}
       <NavBar currentPage="library" />
 
