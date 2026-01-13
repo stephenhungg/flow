@@ -79,12 +79,12 @@ const fragmentShader = `
     vec4 sum = vec4(0.0);
     float t = 0.0;
     
-    // Night sky colors
-    vec3 nightSky = vec3(0.02, 0.04, 0.08);
-    vec3 cloudColorDark = vec3(0.08, 0.12, 0.18);
-    vec3 cloudColorLight = vec3(0.15, 0.2, 0.3);
+    // Enhanced vibrant sky colors with purple/blue theme
+    vec3 nightSky = vec3(0.03, 0.05, 0.12);
+    vec3 cloudColorDark = vec3(0.15, 0.12, 0.25);
+    vec3 cloudColorLight = vec3(0.35, 0.28, 0.55);
     
-    // Subtle moonlight direction
+    // Enhanced lighting direction with more color
     vec3 moonDir = normalize(vec3(0.5, 0.8, -0.3));
     
     for(int i = 0; i < 64; i++) {
@@ -105,11 +105,12 @@ const fragmentShader = `
         float denOffset = cloudDensity(pos + moonDir * 0.3);
         float diff = clamp((den - denOffset) / 0.3, 0.0, 1.0);
         
-        // Cloud color with subtle moonlight
-        vec3 col = mix(cloudColorDark, cloudColorLight, diff * 0.5 + 0.2);
+        // Enhanced cloud color with vibrant moonlight
+        vec3 col = mix(cloudColorDark, cloudColorLight, diff * 0.7 + 0.3);
         
-        // Add subtle blue rim light
-        col += vec3(0.1, 0.15, 0.25) * diff * 0.3;
+        // Add vibrant purple/blue rim light
+        col += vec3(0.25, 0.2, 0.4) * diff * 0.5;
+        col += vec3(0.15, 0.25, 0.45) * (1.0 - diff) * 0.3;
         
         // Fog/atmosphere
         col = mix(col, nightSky, 1.0 - exp(-0.02 * t));
@@ -143,22 +144,25 @@ const fragmentShader = `
     
     vec3 rd = normalize(uv.x * uu + uv.y * vv + 1.5 * ww);
     
-    // Night sky gradient
-    vec3 skyColor = vec3(0.01, 0.02, 0.05);
-    skyColor += vec3(0.02, 0.03, 0.06) * (1.0 - abs(rd.y));
+    // Enhanced vibrant sky gradient with purple/blue tones
+    vec3 skyColor = vec3(0.04, 0.06, 0.14);
+    // Add gradient from deep purple-blue to lighter blue
+    float horizonGrad = (1.0 - abs(rd.y)) * 0.5;
+    skyColor += vec3(0.08, 0.12, 0.22) * horizonGrad;
+    skyColor += vec3(0.12, 0.15, 0.28) * (1.0 - rd.y) * 0.3;
     
-    // Subtle stars
-    float stars = pow(hash(rd * 500.0), 20.0) * step(0.3, rd.y);
-    skyColor += vec3(0.8, 0.85, 1.0) * stars * 0.3;
+    // Enhanced stars with more visibility
+    float stars = pow(hash(rd * 500.0), 18.0) * step(0.2, rd.y);
+    skyColor += vec3(0.9, 0.92, 1.0) * stars * 0.5;
     
-    // Moon glow
+    // Enhanced moon glow with purple tint
     vec3 moonDir = normalize(vec3(0.5, 0.6, -0.3));
     float moonGlow = pow(max(0.0, dot(rd, moonDir)), 64.0);
-    skyColor += vec3(0.15, 0.18, 0.25) * moonGlow;
+    skyColor += vec3(0.3, 0.25, 0.45) * moonGlow * 1.2;
     
-    // Subtle moon halo
+    // Enhanced moon halo with color
     float moonHalo = pow(max(0.0, dot(rd, moonDir)), 8.0);
-    skyColor += vec3(0.05, 0.08, 0.12) * moonHalo;
+    skyColor += vec3(0.15, 0.18, 0.35) * moonHalo;
     
     // Raymarch clouds
     vec4 clouds = raymarchClouds(ro, rd);
@@ -171,8 +175,12 @@ const fragmentShader = `
     float vignette = 1.0 - 0.3 * length((vUv - 0.5) * 1.5);
     col *= vignette;
     
-    // Very subtle color grading - add warmth
-    col = pow(col, vec3(0.95, 0.97, 1.0));
+    // Enhanced color grading - boost saturation and contrast
+    col = pow(col, vec3(0.92, 0.94, 1.0));
+    
+    // Add subtle color vibrancy
+    float luma = dot(col, vec3(0.299, 0.587, 0.114));
+    col = mix(col, col * 1.2, 0.3);
     
     // Output with slight transparency for layering
     gl_FragColor = vec4(col, 0.95);
@@ -306,7 +314,7 @@ export function CloudBackground({ className = '' }: CloudBackgroundProps) {
       className={`fixed inset-0 w-full h-full pointer-events-none ${className}`}
       style={{ 
         zIndex: 0,
-        background: 'linear-gradient(to bottom, #010208, #030610)',
+        background: 'linear-gradient(to bottom, #0a0b1a, #1a1b2e, #0f1120)',
       }}
     />
   );
