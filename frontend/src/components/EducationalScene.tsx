@@ -354,6 +354,25 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, s
     pipeline.startPipeline(concept, undefined, qualityMode);
   }, [concept, qualityMode, pipeline]);
 
+  // Handle cancel/exit - cancel pipeline and then exit
+  const handleCancel = useCallback(async () => {
+    console.log('🛑 [PIPELINE] Cancel requested');
+    
+    // Cancel the pipeline if it's running
+    if (pipeline.jobId && pipeline.stage !== 'complete' && pipeline.stage !== 'error' && pipeline.stage !== 'idle') {
+      await pipeline.cancelPipeline();
+    }
+    
+    // Reset pipeline state
+    pipeline.reset();
+    
+    // Reset auto-save flag
+    hasAutoSavedRef.current = false;
+    
+    // Call the original onExit handler
+    onExit?.();
+  }, [pipeline, onExit]);
+
   // Show new loading screen during processing
   if (mode === 'processing' && useNewLoadingScreen) {
     return (
@@ -368,8 +387,8 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, s
         error={pipeline.error}
         onComplete={handleLoadingComplete}
         onRetry={handleRetry}
-        onExit={onExit}
-        onCancel={onExit}
+        onExit={handleCancel}
+        onCancel={handleCancel}
       />
     );
   }
@@ -473,7 +492,7 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, s
             </motion.button>
             {onExit && (
               <motion.button
-                onClick={onExit}
+                onClick={handleCancel}
                 className="glass px-4 py-2 rounded-full font-mono text-sm text-white hover:bg-white/30 transition-colors"
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}

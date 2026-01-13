@@ -2126,6 +2126,7 @@ app.post('/api/pipeline/start', authMiddleware, creditCheckMiddleware, rateLimit
       quality: quality || 'standard',
       startTime: Date.now(),
       userId: req.userId.toString(),
+      cancelled: false,
     });
 
     // Return jobId immediately so frontend can subscribe
@@ -2174,13 +2175,71 @@ app.get('/api/pipeline/:jobId/status', (req, res) => {
 });
 
 /**
+ * POST /api/pipeline/:jobId/cancel
+ * Cancel a running pipeline job and refund credits
+ */
+app.post('/api/pipeline/:jobId/cancel', authMiddleware, async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const job = pipelineJobs.get(jobId);
+    
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    // Verify user owns this job
+    const usersCollection = getUsersCollection();
+    const user = await usersCollection.findOne({ firebaseUid: req.user.uid });
+    if (!user || user._id.toString() !== job.userId) {
+      return res.status(403).json({ error: 'Not authorized to cancel this job' });
+    }
+
+    // Mark job as cancelled
+    job.cancelled = true;
+    job.status = 'cancelled';
+    pipelineJobs.set(jobId, job);
+
+    // Refund credits if job was started but not completed - skip for admin
+    const userEmail = user.email?.toLowerCase().trim();
+    const isAdmin = ADMIN_EMAILS.includes(userEmail);
+    
+    if (!isAdmin && job.status === 'started') {
+      await usersCollection.findOneAndUpdate(
+        { _id: user._id },
+        { $inc: { credits: CREDITS_PER_GENERATION } }
+      );
+      console.log(`💰 [CREDITS] Refunded ${CREDITS_PER_GENERATION} credit(s) due to cancellation.`);
+    }
+
+    // Notify via WebSocket
+    emitPipelineUpdate(jobId, 'error', 0, 'Pipeline cancelled by user', { error: true, cancelled: true });
+
+    res.json({ success: true, message: 'Pipeline cancelled' });
+  } catch (error) {
+    console.error('❌ [PIPELINE] Cancel error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * Run the full pipeline with WebSocket updates - REAL API CALLS
  */
 async function runPipeline(jobId, concept, imageFile, quality = 'standard') {
   const MARBLE_API_KEY_LOCAL = process.env.VITE_MARBLE_API_KEY;
   const GEMINI_API_KEY = process.env.VITE_GEMINI_API_KEY;
   
+  // Helper to check if job is cancelled
+  const checkCancelled = () => {
+    const job = pipelineJobs.get(jobId);
+    return job?.cancelled === true;
+  };
+  
   try {
+    // Check if cancelled before starting
+    if (checkCancelled()) {
+      console.log(`⏹️ [PIPELINE] Job ${jobId} was cancelled before starting`);
+      return;
+    }
     // Stage 1: Orchestrating (5-15%) - Quick UI updates, no artificial delays
     emitPipelineUpdate(jobId, 'orchestrating', 5, 'Analyzing your concept...', {
       details: 'Understanding the scene requirements'

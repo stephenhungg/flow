@@ -218,6 +218,64 @@ export function usePipelineSocket() {
       throw error;
     }
   }, []);
+  // Cancel pipeline
+  const cancelPipeline = useCallback(async () => {
+    const jobId = activeJobIdRef.current;
+    if (!jobId) {
+      console.log('⚠️ [PIPELINE] No active job to cancel');
+      return;
+    }
+
+    try {
+      const token = await getIdToken();
+      if (!token) {
+        console.warn('⚠️ [PIPELINE] Not signed in, cannot cancel');
+        return;
+      }
+
+      console.log('🛑 [PIPELINE] Cancelling job:', jobId);
+      
+      const response = await fetch(`${API_URL}/api/pipeline/${jobId}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to cancel pipeline');
+      }
+
+      // Leave the pipeline room
+      if (socketRef.current) {
+        socketRef.current.emit('leave-pipeline', jobId);
+      }
+
+      // Reset state
+      activeJobIdRef.current = null;
+      setState(prev => ({
+        ...prev,
+        stage: 'idle',
+        jobId: null,
+        message: 'Pipeline cancelled',
+        error: 'Pipeline cancelled by user',
+      }));
+
+      console.log('✅ [PIPELINE] Pipeline cancelled successfully');
+    } catch (error: any) {
+      console.error('❌ [PIPELINE] Failed to cancel:', error);
+      // Still reset state even if cancel request failed
+      activeJobIdRef.current = null;
+      setState(prev => ({
+        ...prev,
+        stage: 'idle',
+        jobId: null,
+        message: 'Pipeline cancelled',
+        error: 'Pipeline cancelled',
+      }));
+    }
+  }, [getIdToken]);
+
   // Reset state
   const reset = useCallback(() => {
     activeJobIdRef.current = null;
@@ -243,6 +301,7 @@ export function usePipelineSocket() {
   return {
     ...state,
     startPipeline,
+    cancelPipeline,
     reset,
   };
 }
