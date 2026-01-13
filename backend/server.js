@@ -319,6 +319,7 @@ const ADMIN_EMAILS = process.env.ADMIN_EMAILS
 // Pricing set to be competitive while covering costs
 const CREDITS_PER_GENERATION = 1; // Cost per 3D generation (in our system)
 const CREDITS_PACKAGES = {
+  1: 99,    // $0.99 for 1 credit - Single generation option
   5: 499,   // $4.99 for 5 credits (~$1.00/gen) - Small loss to attract users
   10: 999,  // $9.99 for 10 credits (~$1.00/gen)
   20: 1899, // $18.99 for 20 credits (~$0.95/gen) - Best value, covers cost
