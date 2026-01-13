@@ -23,6 +23,12 @@ export function ExplorePage() {
     const query = params.get('q');
     const sceneId = params.get('sceneId');
     const hasImage = params.get('hasImage');
+    const quality = params.get('quality');
+    
+    // Store quality mode from URL params if provided
+    if (quality) {
+      sessionStorage.setItem('qualityMode', quality);
+    }
     
     // Check for custom image in sessionStorage
     if (hasImage === 'true') {

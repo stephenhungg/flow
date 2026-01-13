@@ -2157,7 +2157,7 @@ app.get('/api/pipeline/:jobId/status', (req, res) => {
 /**
  * Run the full pipeline with WebSocket updates - REAL API CALLS
  */
-async function runPipeline(jobId, concept, imageFile) {
+async function runPipeline(jobId, concept, imageFile, quality = 'standard') {
   const MARBLE_API_KEY_LOCAL = process.env.VITE_MARBLE_API_KEY;
   const GEMINI_API_KEY = process.env.VITE_GEMINI_API_KEY;
   
@@ -2348,14 +2348,29 @@ Make this look like a frame from a Terrence Malick or Denis Villeneuve film - be
 
     // Step 2: Generate world with enhanced text prompt
     // Text prompt helps Marble understand the scene better
-    const enhancedTextPrompt = `${concept}. 
-A beautiful, immersive 3D environment with rich architectural details and atmospheric depth. 
-Natural lighting, realistic textures, explorable space with clear pathways and interesting viewpoints.`;
+    // Adjust prompt based on quality mode
+    let enhancedTextPrompt = `${concept}. `;
+    
+    if (quality === 'quick') {
+      // Quick mode: minimal prompt for faster generation
+      enhancedTextPrompt += 'A 3D environment suitable for quick exploration.';
+    } else if (quality === 'premium') {
+      // Premium mode: detailed prompt for wide vistas
+      enhancedTextPrompt += `A beautiful, immersive 3D environment with rich architectural details and atmospheric depth. 
+Natural lighting, realistic textures, wide explorable spaces with clear pathways and interesting viewpoints. 
+Perfect for wide vistas and expansive exploration.`;
+    } else {
+      // Standard mode: balanced prompt for tight spaces
+      enhancedTextPrompt += `A beautiful, immersive 3D environment with rich architectural details and atmospheric depth. 
+Natural lighting, realistic textures, explorable space with clear pathways and interesting viewpoints. 
+Optimized for tight spaces and detailed exploration.`;
+    }
 
-    console.log('🌍 [PIPELINE] Generating world with enhanced prompt:', enhancedTextPrompt.substring(0, 100) + '...');
+    console.log('🌍 [PIPELINE] Generating world with quality:', quality);
+    console.log('🌍 [PIPELINE] Enhanced prompt:', enhancedTextPrompt.substring(0, 100) + '...');
 
     emitPipelineUpdate(jobId, 'creating_world', 50, 'Generating 3D world...', {
-      details: `Prompt: "${enhancedTextPrompt}"`
+      details: `Quality: ${quality} | Prompt: "${enhancedTextPrompt.substring(0, 60)}..."`
     });
 
     const generateResponse = await fetch(MARBLE_GENERATE_ENDPOINT, {
