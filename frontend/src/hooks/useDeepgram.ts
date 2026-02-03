@@ -60,16 +60,12 @@ export function useDeepgram({ onTranscript, onCommandDetected }: UseDeepgramOpti
       audioContextRef.current = null;
     }
 
-    // CRITICAL: Stop all tracks AND revoke any object URLs
+    // CRITICAL: Stop all tracks
     if (mediaStreamRef.current) {
       try {
         // Stop each track explicitly
         mediaStreamRef.current.getTracks().forEach((track) => {
           track.stop();
-          // Remove all event listeners from the track
-          track.removeEventListener('ended', null);
-          track.removeEventListener('mute', null);
-          track.removeEventListener('unmute', null);
         });
         // Clear the reference
         mediaStreamRef.current = null;
