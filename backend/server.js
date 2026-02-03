@@ -2299,6 +2299,10 @@ app.post('/api/pipeline/:jobId/cancel', authMiddleware, async (req, res) => {
       return res.status(403).json({ error: 'Not authorized to cancel this job' });
     }
 
+    // CRITICAL FIX: Check status BEFORE changing it
+    const originalStatus = job.status;
+    const wasRunning = job.status === 'started' || job.status === 'processing';
+
     // Mark job as cancelled
     job.cancelled = true;
     job.status = 'cancelled';
@@ -2307,13 +2311,14 @@ app.post('/api/pipeline/:jobId/cancel', authMiddleware, async (req, res) => {
     // Refund credits if job was started but not completed - skip for admin
     const userEmail = user.email?.toLowerCase().trim();
     const isAdmin = ADMIN_EMAILS.includes(userEmail);
-    
-    if (!isAdmin && job.status === 'started') {
+
+    // FIX: Check original status, not the cancelled status
+    if (!isAdmin && wasRunning && !job.completed) {
       await usersCollection.findOneAndUpdate(
         { _id: user._id },
         { $inc: { credits: CREDITS_PER_GENERATION } }
       );
-      console.log(`💰 [CREDITS] Refunded ${CREDITS_PER_GENERATION} credit(s) due to cancellation.`);
+      console.log(`💰 [CREDITS] Refunded ${CREDITS_PER_GENERATION} credit(s) for job ${jobId} (was ${originalStatus})`);
     }
 
     // Notify via WebSocket

@@ -265,10 +265,14 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, s
       return;
     }
 
+    // CRITICAL FIX: Set flag immediately to prevent race condition
+    hasAutoSavedRef.current = true;
+
     try {
       const token = await getIdToken();
       if (!token) {
         console.warn('⚠️ [AUTO-SAVE] Not signed in, skipping auto-save');
+        hasAutoSavedRef.current = false; // Reset flag on early return
         return;
       }
 
@@ -310,10 +314,11 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, s
       });
 
       console.log('✅ [AUTO-SAVE] World saved to library:', sceneData._id);
-      // Mark as saved to prevent duplicate saves
-      hasAutoSavedRef.current = true;
+      // Flag already set at the beginning - keep it set
     } catch (error) {
       console.error('❌ [AUTO-SAVE] Failed to save:', error);
+      // Reset flag on failure to allow retry
+      hasAutoSavedRef.current = false;
       // Don't show error to user - auto-save is best-effort
     }
   }, [pipeline.splatUrl, concept, colliderMeshUrl, worldId, thumbnailDataUrl, orchestration, savedSceneId, getIdToken]);

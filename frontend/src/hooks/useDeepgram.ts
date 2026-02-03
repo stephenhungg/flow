@@ -27,27 +27,55 @@ export function useDeepgram({ onTranscript, onCommandDetected }: UseDeepgramOpti
     if (connectionRef.current) {
       try {
         connectionRef.current.requestClose();
-      } catch {}
+      } catch (e) {
+        console.warn('Failed to close Deepgram connection:', e);
+      }
       connectionRef.current = null;
     }
 
+    // CRITICAL: Disconnect processor before closing AudioContext
     if (processorRef.current) {
       try {
         processorRef.current.disconnect();
-      } catch {}
+        // Clear the onaudioprocess handler to prevent memory leaks
+        processorRef.current.onaudioprocess = null;
+      } catch (e) {
+        console.warn('Failed to disconnect processor:', e);
+      }
       processorRef.current = null;
     }
 
+    // Close AudioContext AFTER disconnecting processor
     if (audioContextRef.current) {
       try {
-        audioContextRef.current.close();
-      } catch {}
+        // Suspend first to stop processing, then close
+        if (audioContextRef.current.state !== 'closed') {
+          audioContextRef.current.suspend().then(() => {
+            audioContextRef.current?.close();
+          }).catch(e => console.warn('Failed to suspend AudioContext:', e));
+        }
+      } catch (e) {
+        console.warn('Failed to close AudioContext:', e);
+      }
       audioContextRef.current = null;
     }
 
+    // CRITICAL: Stop all tracks AND revoke any object URLs
     if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach((t) => t.stop());
-      mediaStreamRef.current = null;
+      try {
+        // Stop each track explicitly
+        mediaStreamRef.current.getTracks().forEach((track) => {
+          track.stop();
+          // Remove all event listeners from the track
+          track.removeEventListener('ended', null);
+          track.removeEventListener('mute', null);
+          track.removeEventListener('unmute', null);
+        });
+        // Clear the reference
+        mediaStreamRef.current = null;
+      } catch (e) {
+        console.warn('Failed to stop MediaStream:', e);
+      }
     }
 
     setIsListening(false);
@@ -69,6 +97,15 @@ export function useDeepgram({ onTranscript, onCommandDetected }: UseDeepgramOpti
 
   const startListening = async () => {
     try {
+      // CRITICAL: Stop any existing session before starting a new one
+      // This prevents memory leaks from rapid start/stop cycles
+      if (isListening || connectionRef.current || mediaStreamRef.current) {
+        console.log('⚠️ Cleaning up existing session before starting new one');
+        stopListening();
+        // Wait a bit for cleanup to complete
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
       setError(null);
 
       // reset for new session
@@ -86,6 +123,7 @@ export function useDeepgram({ onTranscript, onCommandDetected }: UseDeepgramOpti
           channelCount: 1,
           echoCancellation: true,
           noiseSuppression: true,
+          autoGainControl: true,
         },
       });
       mediaStreamRef.current = stream;

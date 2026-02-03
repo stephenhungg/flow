@@ -64,20 +64,42 @@ export function usePipelineSocket() {
     isConnected: false,
   });
 
-  // Connect to socket with auto-reconnection
+  // Connect to socket with exponential backoff and jitter
   useEffect(() => {
+    let reconnectAttempt = 0;
+    let reconnectTimeout: NodeJS.Timeout | null = null;
+    const maxReconnectDelay = 30000; // 30 seconds max
+    const baseDelay = 1000; // 1 second base
+    const maxReconnectAttempts = Infinity; // Keep trying forever
+
+    // Calculate exponential backoff with jitter
+    const calculateBackoff = (attempt: number) => {
+      // Exponential backoff: 2^attempt * baseDelay
+      const exponentialDelay = Math.min(Math.pow(2, attempt) * baseDelay, maxReconnectDelay);
+      // Add random jitter (0-25% of delay) to prevent thundering herd
+      const jitter = Math.random() * exponentialDelay * 0.25;
+      return exponentialDelay + jitter;
+    };
+
     const socket = io(API_URL, {
       transports: ['websocket', 'polling'],
       reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
+      reconnectionAttempts: maxReconnectAttempts,
+      reconnectionDelay: baseDelay,
+      reconnectionDelayMax: maxReconnectDelay,
       timeout: 20000,
+      // Custom reconnection logic
+      randomizationFactor: 0.25, // Add 25% randomization to delays
     });
 
     socket.on('connect', () => {
       console.log('🔌 [SOCKET] Connected to server');
-      setState(prev => ({ ...prev, isConnected: true }));
+      reconnectAttempt = 0; // Reset attempt counter on successful connection
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+      }
+      setState(prev => ({ ...prev, isConnected: true, error: null }));
 
       // Rejoin pipeline room if we have an active job
       if (activeJobIdRef.current) {
@@ -89,14 +111,35 @@ export function usePipelineSocket() {
     socket.on('disconnect', (reason) => {
       console.log('🔌 [SOCKET] Disconnected from server:', reason);
       setState(prev => ({ ...prev, isConnected: false }));
+
+      // If disconnect wasn't intentional, show user-friendly message
+      if (reason === 'io server disconnect') {
+        setState(prev => ({ ...prev, message: 'Server disconnected. Please refresh the page.' }));
+      } else if (reason === 'ping timeout' || reason === 'transport close') {
+        setState(prev => ({ ...prev, message: 'Connection lost. Reconnecting...' }));
+      }
     });
 
     socket.on('connect_error', (error) => {
-      console.warn('⚠️ [SOCKET] Connection error:', error.message);
+      reconnectAttempt++;
+      const backoffDelay = calculateBackoff(reconnectAttempt);
+      console.warn(`⚠️ [SOCKET] Connection error (attempt ${reconnectAttempt}):`, error.message);
+      console.log(`⏱️ [SOCKET] Next retry in ${Math.round(backoffDelay / 1000)}s`);
+
+      // Update UI with reconnection status
+      setState(prev => ({
+        ...prev,
+        message: `Reconnecting... (attempt ${reconnectAttempt}, next try in ${Math.round(backoffDelay / 1000)}s)`
+      }));
     });
 
     socket.on('reconnect', (attemptNumber) => {
       console.log('🔄 [SOCKET] Reconnected after', attemptNumber, 'attempts');
+      setState(prev => ({ ...prev, message: 'Reconnected successfully' }));
+      // Clear message after 2 seconds
+      setTimeout(() => {
+        setState(prev => ({ ...prev, message: '' }));
+      }, 2000);
     });
 
     socket.on('reconnect_attempt', (attemptNumber) => {
@@ -109,6 +152,11 @@ export function usePipelineSocket() {
 
     socket.on('reconnect_failed', () => {
       console.error('❌ [SOCKET] Reconnection failed after max attempts');
+      setState(prev => ({
+        ...prev,
+        error: 'Connection failed. Please refresh the page.',
+        message: 'Connection failed. Please refresh the page.'
+      }));
     });
 
     socket.on('pipeline:progress', (data) => {

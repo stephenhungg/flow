@@ -35,7 +35,8 @@ export const FirstPersonScene = forwardRef<FirstPersonSceneHandle, FirstPersonSc
   const raycasterRef = useRef(new THREE.Raycaster());
   const [isLoading, setIsLoading] = useState(true);
   const [isLocked, setIsLocked] = useState(false);
-  
+  const [isMobile, setIsMobile] = useState(false);
+
   // Movement state
   const keysRef = useRef({
     forward: false,
@@ -46,9 +47,21 @@ export const FirstPersonScene = forwardRef<FirstPersonSceneHandle, FirstPersonSc
     down: false,
     sprint: false,
   });
-  
+
   const velocityRef = useRef(new THREE.Vector3());
   const eulerRef = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
+
+  // Mobile touch state
+  const touchStateRef = useRef({
+    startX: 0,
+    startY: 0,
+    currentX: 0,
+    currentY: 0,
+    isDragging: false,
+    joystickActive: false,
+    joystickX: 0,
+    joystickY: 0,
+  });
 
   // Request pointer lock
   const requestLock = useCallback(() => {
@@ -59,6 +72,16 @@ export const FirstPersonScene = forwardRef<FirstPersonSceneHandle, FirstPersonSc
 
   useEffect(() => {
     if (!mountRef.current) return;
+
+    // Detect mobile device
+    const checkMobile = () => {
+      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+                            ('ontouchstart' in window) ||
+                            (navigator.maxTouchPoints > 0);
+      setIsMobile(isMobileDevice);
+      return isMobileDevice;
+    };
+    const mobile = checkMobile();
 
     // Clear existing content
     mountRef.current.innerHTML = '';
@@ -307,13 +330,103 @@ export const FirstPersonScene = forwardRef<FirstPersonSceneHandle, FirstPersonSc
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
 
-    // Click to lock
+    // Click to lock (desktop only)
     const onClick = () => {
-      if (document.pointerLockElement !== renderer.domElement) {
+      if (!mobile && document.pointerLockElement !== renderer.domElement) {
         renderer.domElement.requestPointerLock();
       }
     };
     renderer.domElement.addEventListener('click', onClick);
+
+    // Mobile touch controls
+    let touchStartTime = 0;
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        touchStateRef.current.startX = touch.clientX;
+        touchStateRef.current.startY = touch.clientY;
+        touchStateRef.current.currentX = touch.clientX;
+        touchStateRef.current.currentY = touch.clientY;
+        touchStateRef.current.isDragging = true;
+        touchStartTime = Date.now();
+        setIsLocked(true);
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!touchStateRef.current.isDragging || e.touches.length !== 1) return;
+      e.preventDefault();
+
+      const touch = e.touches[0];
+      const deltaX = touch.clientX - touchStateRef.current.currentX;
+      const deltaY = touch.clientY - touchStateRef.current.currentY;
+
+      // Camera rotation (right side of screen)
+      if (touch.clientX > window.innerWidth / 2) {
+        if (camera) {
+          eulerRef.current.setFromQuaternion(camera.quaternion);
+          eulerRef.current.y -= deltaX * 0.005;
+          eulerRef.current.x -= deltaY * 0.005;
+          eulerRef.current.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, eulerRef.current.x));
+          camera.quaternion.setFromEuler(eulerRef.current);
+        }
+      } else {
+        // Movement joystick (left side of screen)
+        const maxDist = 50;
+        const dx = touch.clientX - touchStateRef.current.startX;
+        const dy = touch.clientY - touchStateRef.current.startY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist > 5) {
+          touchStateRef.current.joystickActive = true;
+          const clampedDist = Math.min(dist, maxDist);
+          const angle = Math.atan2(dy, dx);
+          touchStateRef.current.joystickX = (Math.cos(angle) * clampedDist) / maxDist;
+          touchStateRef.current.joystickY = (Math.sin(angle) * clampedDist) / maxDist;
+
+          // Set movement keys based on joystick position
+          keysRef.current.forward = touchStateRef.current.joystickY < -0.3;
+          keysRef.current.backward = touchStateRef.current.joystickY > 0.3;
+          keysRef.current.left = touchStateRef.current.joystickX < -0.3;
+          keysRef.current.right = touchStateRef.current.joystickX > 0.3;
+        }
+      }
+
+      touchStateRef.current.currentX = touch.clientX;
+      touchStateRef.current.currentY = touch.clientY;
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      const touchDuration = Date.now() - touchStartTime;
+
+      // Double tap to fly up
+      if (touchDuration < 200 && e.changedTouches[0].clientY < window.innerHeight / 3) {
+        keysRef.current.up = true;
+        setTimeout(() => { keysRef.current.up = false; }, 500);
+      }
+
+      touchStateRef.current.isDragging = false;
+      touchStateRef.current.joystickActive = false;
+      touchStateRef.current.joystickX = 0;
+      touchStateRef.current.joystickY = 0;
+
+      // Reset movement keys
+      keysRef.current.forward = false;
+      keysRef.current.backward = false;
+      keysRef.current.left = false;
+      keysRef.current.right = false;
+
+      if (e.touches.length === 0) {
+        setIsLocked(false);
+      }
+    };
+
+    if (mobile) {
+      renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: false });
+      renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
+      renderer.domElement.addEventListener('touchend', onTouchEnd, { passive: false });
+      renderer.domElement.addEventListener('touchcancel', onTouchEnd, { passive: false });
+    }
 
     // Sphere collision detection using multiple raycasts
     const checkSphereCollision = (
@@ -545,22 +658,107 @@ export const FirstPersonScene = forwardRef<FirstPersonSceneHandle, FirstPersonSc
     };
     window.addEventListener('resize', handleResize);
 
-    // Cleanup
+    // Cleanup with proper memory management
     return () => {
+      // Stop animation loop
       cancelAnimationFrame(animationId);
+
+      // Remove event listeners
       document.removeEventListener('pointerlockchange', onPointerLockChange);
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('keyup', onKeyUp);
       renderer.domElement.removeEventListener('click', onClick);
       window.removeEventListener('resize', handleResize);
+
+      // Remove mobile touch listeners
+      if (mobile) {
+        renderer.domElement.removeEventListener('touchstart', onTouchStart);
+        renderer.domElement.removeEventListener('touchmove', onTouchMove);
+        renderer.domElement.removeEventListener('touchend', onTouchEnd);
+        renderer.domElement.removeEventListener('touchcancel', onTouchEnd);
+      }
+
+      // Exit pointer lock if active
       if (document.pointerLockElement === renderer.domElement) {
         document.exitPointerLock();
       }
+
+      // CRITICAL: Properly dispose of all Three.js objects to prevent memory leaks
+      if (scene) {
+        // Traverse and dispose all objects in the scene
+        scene.traverse((object) => {
+          if (object instanceof THREE.Mesh) {
+            // Dispose geometry
+            if (object.geometry) {
+              object.geometry.dispose();
+            }
+
+            // Dispose material(s) and textures
+            if (object.material) {
+              const disposeMaterial = (material: any) => {
+                // Dispose all possible texture maps
+                ['map', 'lightMap', 'bumpMap', 'normalMap', 'specularMap', 'envMap',
+                 'alphaMap', 'aoMap', 'displacementMap', 'emissiveMap', 'gradientMap',
+                 'metalnessMap', 'roughnessMap'].forEach(mapName => {
+                  if (material[mapName]) {
+                    material[mapName].dispose();
+                  }
+                });
+                material.dispose();
+              };
+
+              if (Array.isArray(object.material)) {
+                object.material.forEach(disposeMaterial);
+              } else {
+                disposeMaterial(object.material);
+              }
+            }
+          }
+
+          // Special handling for SplatMesh (Gaussian Splat)
+          if ((object as any).dispose && typeof (object as any).dispose === 'function') {
+            try {
+              (object as any).dispose();
+            } catch (e) {
+              console.warn('Failed to dispose SplatMesh:', e);
+            }
+          }
+        });
+
+        // Clear the scene
+        scene.clear();
+      }
+
+      // Dispose collider meshes
+      if (colliderMeshesRef.current.length > 0) {
+        colliderMeshesRef.current.forEach(mesh => {
+          if (mesh.geometry) mesh.geometry.dispose();
+          if (mesh.material) {
+            if (Array.isArray(mesh.material)) {
+              mesh.material.forEach((mat: any) => mat.dispose());
+            } else {
+              (mesh.material as any).dispose();
+            }
+          }
+        });
+        colliderMeshesRef.current = [];
+      }
+
+      // Remove renderer DOM element
       if (mountRef.current && renderer.domElement) {
         mountRef.current.removeChild(renderer.domElement);
       }
+
+      // Dispose renderer and force context loss
       renderer.dispose();
+      renderer.forceContextLoss();
+
+      // Clear all refs to help garbage collection
+      sceneRef.current = null;
+      cameraRef.current = null;
+      rendererRef.current = null;
+      colliderRef.current = null;
     };
   }, [splatUrl, onSceneReady]);
 
@@ -627,31 +825,59 @@ export const FirstPersonScene = forwardRef<FirstPersonSceneHandle, FirstPersonSc
       )}
       
       {/* Controls hint */}
-      <div 
+      <div
         className={`absolute bottom-6 right-6 glass px-4 py-3 rounded-lg font-mono text-xs transition-opacity duration-300 ${isLocked ? 'opacity-30 hover:opacity-80' : 'opacity-100'}`}
       >
         <div className="text-white/90 mb-2 font-medium">
-          {isLocked ? '🎮 controls active' : '👆 click to enter'}
+          {isMobile ? '📱 touch controls' : (isLocked ? '🎮 controls active' : '👆 click to enter')}
         </div>
         <div className="text-white/60 space-y-1">
-          <div>wasd — move (hold for momentum)</div>
-          <div>mouse — look around</div>
-          <div>space/ctrl — fly up/down</div>
-          <div>shift — sprint faster</div>
-          <div>p — debug collider</div>
-          <div>esc — release cursor</div>
+          {isMobile ? (
+            <>
+              <div>left side — move joystick</div>
+              <div>right side — look around</div>
+              <div>double tap top — fly up</div>
+            </>
+          ) : (
+            <>
+              <div>wasd — move (hold for momentum)</div>
+              <div>mouse — look around</div>
+              <div>space/ctrl — fly up/down</div>
+              <div>shift — sprint faster</div>
+              <div>p — debug collider</div>
+              <div>esc — release cursor</div>
+            </>
+          )}
         </div>
       </div>
       
       {/* Lock prompt when not locked */}
-      {!isLocked && !isLoading && (
-        <div 
+      {!isLocked && !isLoading && !isMobile && (
+        <div
           className="absolute inset-0 flex items-center justify-center cursor-pointer"
           onClick={requestLock}
         >
           <div className="glass px-8 py-6 rounded-xl text-center animate-pulse">
             <p className="font-mono text-white text-lg mb-2">👆 click anywhere to explore</p>
             <p className="font-mono text-white/50 text-sm">press esc to exit at any time</p>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile touch zones indicator */}
+      {isMobile && !isLoading && (
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute left-0 top-0 w-1/2 h-full border-r border-white/10">
+            <div className="absolute bottom-8 left-8 text-white/30 font-mono text-xs">
+              <div className="mb-2">move zone</div>
+              <div className="w-16 h-16 border-2 border-white/20 rounded-full"></div>
+            </div>
+          </div>
+          <div className="absolute right-0 top-0 w-1/2 h-full">
+            <div className="absolute bottom-8 right-8 text-white/30 font-mono text-xs text-right">
+              <div className="mb-2">look zone</div>
+              <div className="w-8 h-8 border-2 border-white/20 rounded-lg ml-auto"></div>
+            </div>
           </div>
         </div>
       )}
