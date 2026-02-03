@@ -6,7 +6,7 @@
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 import { MongoClient, ObjectId } from 'mongodb';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { uploadFile } from '../server/lib/storage.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
@@ -25,28 +25,20 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 const MONGODB_URI = process.env.MONGODB_URI;
 const GEMINI_API_KEY = process.env.VITE_GEMINI_API_KEY;
 
+if (!MONGODB_URI || !GEMINI_API_KEY) {
+  console.error('❌ Missing required environment variables');
+  process.exit(1);
+}
+
 // Initialize Gemini client
 const genai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-
-// Vultr S3 config
-const s3Client = new S3Client({
-  region: 'ewr1',
-  endpoint: `https://${process.env.VULTR_STORAGE_HOSTNAME}`,
-  credentials: {
-    accessKeyId: process.env.VULTR_STORAGE_ACCESS_KEY,
-    secretAccessKey: process.env.VULTR_STORAGE_SECRET_KEY,
-  },
-  forcePathStyle: false,
-});
-
-const BUCKET = process.env.VULTR_STORAGE_BUCKET;
 
 /**
  * Generate video from image using Veo 3.1
  */
 async function generateVideo(thumbnailUrl, concept) {
   console.log(`🎬 Generating video for: "${concept}"`);
-  
+
   // Download the thumbnail image first
   const imageResponse = await fetch(thumbnailUrl);
   if (!imageResponse.ok) {
@@ -54,7 +46,7 @@ async function generateVideo(thumbnailUrl, concept) {
   }
   const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
   const imageBase64 = imageBuffer.toString('base64');
-  
+
   const prompt = `Gentle cinematic camera movement through ${concept}. Subtle parallax effect, atmospheric lighting, dreamlike quality. Slow smooth motion, no sudden changes.`;
 
   try {
@@ -92,185 +84,175 @@ async function generateVideo(thumbnailUrl, concept) {
     }
 
     console.log(`✅ Video generated: ${videoUri}`);
-    
+
     // Download the video
     const videoResponse = await fetch(videoUri);
     if (!videoResponse.ok) {
       throw new Error(`Failed to download video: ${videoResponse.status}`);
     }
-    
-    return Buffer.from(await videoResponse.arrayBuffer());
+
+    const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
+    return videoBuffer;
+
   } catch (error) {
-    // If Veo isn't available, try a fallback approach using Imagen for animation effect
-    console.warn(`⚠️ Veo API error: ${error.message}`);
-    console.log(`🔄 Trying alternative approach...`);
-    
-    // For now, we'll create a simple animated effect from the static image
-    // This is a fallback - in production you'd want full Veo access
+    console.error(`❌ Video generation error: ${error.message}`);
     throw error;
   }
 }
 
 /**
- * Convert video to optimized GIF using FFmpeg
+ * Convert video to GIF using ffmpeg
  */
 async function convertToGif(videoBuffer) {
   const tempDir = os.tmpdir();
-  const timestamp = Date.now();
-  const tempVideoPath = path.join(tempDir, `${timestamp}.mp4`);
-  const tempGifPath = path.join(tempDir, `${timestamp}.gif`);
-  
+  const videoPath = path.join(tempDir, `video-${Date.now()}.mp4`);
+  const gifPath = path.join(tempDir, `gif-${Date.now()}.gif`);
+
   try {
     // Write video to temp file
-    fs.writeFileSync(tempVideoPath, videoBuffer);
-    
-    // Convert to optimized GIF with palette generation for better colors
-    // fps=12: 12 frames per second (smooth but not huge file)
-    // scale=400:-1: 400px width, maintain aspect ratio
-    // palettegen/paletteuse: generate optimal color palette for GIF
-    // loop=0: infinite loop
-    const ffmpegCmd = `ffmpeg -y -i "${tempVideoPath}" -vf "fps=12,scale=400:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse=dither=bayer" -loop 0 "${tempGifPath}"`;
-    
-    console.log(`🔄 Converting to GIF...`);
+    await fs.promises.writeFile(videoPath, videoBuffer);
+
+    // Convert to GIF using ffmpeg (high quality, optimized for web)
+    const ffmpegCmd = `ffmpeg -i ${videoPath} -vf "fps=15,scale=512:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" -loop 0 ${gifPath}`;
+
+    console.log('🎞️ Converting video to GIF...');
     await execPromise(ffmpegCmd);
-    
-    // Read the GIF
-    const gifBuffer = fs.readFileSync(tempGifPath);
-    console.log(`✅ GIF created: ${(gifBuffer.length / 1024).toFixed(1)}KB`);
-    
+
+    // Read the GIF file
+    const gifBuffer = await fs.promises.readFile(gifPath);
+
+    // Clean up temp files
+    await fs.promises.unlink(videoPath).catch(() => {});
+    await fs.promises.unlink(gifPath).catch(() => {});
+
     return gifBuffer;
-  } finally {
-    // Cleanup temp files
-    if (fs.existsSync(tempVideoPath)) fs.unlinkSync(tempVideoPath);
-    if (fs.existsSync(tempGifPath)) fs.unlinkSync(tempGifPath);
+  } catch (error) {
+    // Clean up on error
+    await fs.promises.unlink(videoPath).catch(() => {});
+    await fs.promises.unlink(gifPath).catch(() => {});
+    throw error;
   }
 }
 
 /**
- * Upload GIF to Vultr bucket
+ * Upload animated thumbnail to Vercel Blob
  */
-async function uploadGif(gifBuffer, sceneId, creatorId) {
-  const key = `scenes/${creatorId}/${sceneId}/preview.gif`;
-  
-  await s3Client.send(new PutObjectCommand({
-    Bucket: BUCKET,
-    Key: key,
-    Body: gifBuffer,
-    ContentType: 'image/gif',
-    ACL: 'public-read',
-  }));
-
-  const url = `https://${BUCKET}.${process.env.VULTR_STORAGE_HOSTNAME}/${key}`;
-  console.log(`✅ Uploaded GIF: ${url}`);
+async function uploadAnimatedThumbnail(gifBuffer, userId, sceneId) {
+  const key = `scenes/${userId}/${sceneId}/animated-thumbnail.gif`;
+  const url = await uploadFile(gifBuffer, key, 'image/gif');
+  console.log(`✅ Animated thumbnail uploaded to Vercel Blob: ${url}`);
   return url;
 }
 
-/**
- * Main function
- */
 async function main() {
-  console.log('🚀 Starting animated thumbnail generation...\n');
+  // Parse command line arguments
+  const args = process.argv.slice(2);
+  const limitArg = args.find(arg => arg.startsWith('--limit='));
+  const limit = limitArg ? parseInt(limitArg.split('=')[1]) : null;
+  const skipExisting = args.includes('--skip-existing');
 
-  if (!MONGODB_URI || !GEMINI_API_KEY) {
-    console.error('❌ Missing required environment variables (MONGODB_URI, VITE_GEMINI_API_KEY)');
-    process.exit(1);
+  console.log('🚀 Starting animated thumbnail generation script');
+  if (limit) {
+    console.log(`📊 Processing limit: ${limit} scenes`);
+  }
+  if (skipExisting) {
+    console.log('⏭️ Skipping scenes with existing animated thumbnails');
   }
 
-  // Check FFmpeg is installed
+  // Check if ffmpeg is available
   try {
     await execPromise('ffmpeg -version');
-    console.log('✅ FFmpeg found\n');
-  } catch {
-    console.error('❌ FFmpeg not found. Please install FFmpeg first.');
+    console.log('✅ ffmpeg is available');
+  } catch (error) {
+    console.error('❌ ffmpeg is not installed. Please install ffmpeg to use this script.');
     process.exit(1);
   }
 
   const client = new MongoClient(MONGODB_URI);
-  
+
   try {
     await client.connect();
-    console.log('✅ Connected to MongoDB\n');
+    console.log('✅ Connected to MongoDB');
 
     const db = client.db('flow');
-    const scenes = db.collection('scenes');
+    const scenesCollection = db.collection('scenes');
 
-    // Find scenes with thumbnails but no animated thumbnails
-    const scenesToProcess = await scenes.find({
-      thumbnailUrl: { $exists: true, $ne: null, $ne: '' },
-      $or: [
-        { animatedThumbnailUrl: null },
-        { animatedThumbnailUrl: { $exists: false } },
-        { animatedThumbnailUrl: '' }
-      ]
-    }).toArray();
+    // Find scenes with thumbnails but no animated thumbnails (or all if not skipping)
+    const query = {
+      thumbnailUrl: { $exists: true, $ne: null, $ne: '' }
+    };
 
-    console.log(`📋 Found ${scenesToProcess.length} scenes needing animated thumbnails\n`);
-
-    if (scenesToProcess.length === 0) {
-      console.log('✨ All scenes already have animated thumbnails!');
-      return;
+    if (skipExisting) {
+      query.animatedThumbnailUrl = { $in: [null, '', undefined] };
     }
+
+    const scenes = await scenesCollection
+      .find(query)
+      .limit(limit || 0)
+      .toArray();
+
+    console.log(`\n📊 Found ${scenes.length} scenes to process`);
 
     let successCount = 0;
     let errorCount = 0;
+    let skippedCount = 0;
 
-    for (const scene of scenesToProcess) {
-      console.log(`\n${'='.repeat(60)}`);
-      console.log(`Processing: "${scene.title}" (${scene._id})`);
-      console.log(`Concept: ${scene.concept}`);
-      console.log(`Thumbnail: ${scene.thumbnailUrl}`);
-      console.log(`${'='.repeat(60)}`);
+    for (const scene of scenes) {
+      const sceneId = scene._id.toString();
+      console.log(`\n🎨 Processing scene: ${scene.title} (${sceneId})`);
+
+      // Skip if animated thumbnail already exists and we're skipping
+      if (scene.animatedThumbnailUrl && skipExisting) {
+        console.log(`✅ Animated thumbnail already exists, skipping`);
+        skippedCount++;
+        continue;
+      }
 
       try {
         // Generate video from thumbnail
-        const videoBuffer = await generateVideo(scene.thumbnailUrl, scene.concept);
-        
+        const videoBuffer = await generateVideo(scene.thumbnailUrl, scene.concept || scene.title);
+
         // Convert to GIF
         const gifBuffer = await convertToGif(videoBuffer);
-        
-        // Upload to Vultr
-        const animatedThumbnailUrl = await uploadGif(
-          gifBuffer,
-          scene._id.toString(),
-          scene.creatorId.toString()
-        );
 
-        // Update scene in MongoDB
-        await scenes.updateOne(
+        // Upload to Vercel Blob
+        const animatedUrl = await uploadAnimatedThumbnail(gifBuffer, scene.userId, sceneId);
+
+        // Update scene with animated thumbnail URL
+        await scenesCollection.updateOne(
           { _id: scene._id },
-          { 
-            $set: { 
-              animatedThumbnailUrl,
-              updatedAt: new Date() 
-            } 
+          {
+            $set: {
+              animatedThumbnailUrl: animatedUrl,
+              updatedAt: new Date()
+            }
           }
         );
 
-        console.log(`✅ Successfully updated scene with animated thumbnail`);
         successCount++;
+        console.log(`✅ Successfully created animated thumbnail`);
 
-        // Rate limiting - wait between requests
-        console.log(`⏳ Waiting 5 seconds before next scene...`);
-        await new Promise(r => setTimeout(r, 5000));
-
-      } catch (err) {
-        console.error(`❌ Error processing scene: ${err.message}`);
+      } catch (error) {
+        console.error(`❌ Error processing scene ${sceneId}: ${error.message}`);
         errorCount++;
       }
+
+      // Rate limiting delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
     }
 
-    console.log(`\n${'='.repeat(60)}`);
-    console.log(`📊 SUMMARY`);
-    console.log(`${'='.repeat(60)}`);
-    console.log(`✅ Successfully generated: ${successCount}`);
-    console.log(`❌ Errors: ${errorCount}`);
-    console.log(`${'='.repeat(60)}\n`);
+    console.log(`\n✅ Completed!`);
+    console.log(`   - Success: ${successCount}`);
+    console.log(`   - Errors: ${errorCount}`);
+    console.log(`   - Skipped: ${skippedCount}`);
 
+  } catch (error) {
+    console.error('❌ Script error:', error);
   } finally {
     await client.close();
     console.log('👋 Disconnected from MongoDB');
   }
 }
 
+// Run the script
 main().catch(console.error);
-

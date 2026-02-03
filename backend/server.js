@@ -14,6 +14,9 @@ import multer from 'multer';
 import fetch from 'node-fetch';
 import dotenv from 'dotenv';
 import Stripe from 'stripe';
+import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import { body, validationResult } from 'express-validator';
 import { connectToDatabase, getUsersCollection, getScenesCollection } from './server/lib/mongodb.js';
 import { authMiddleware } from './server/lib/auth.js';
 import { uploadFile, deleteFile, generateSplatKey } from './server/lib/storage.js';
@@ -77,6 +80,91 @@ const io = new SocketIOServer(httpServer, {
 
 // Store active pipeline jobs
 const pipelineJobs = new Map();
+
+// ============================================
+// SECURITY MIDDLEWARE - CRITICAL FOR PRODUCTION
+// ============================================
+
+// Security headers with helmet
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.jsdelivr.net"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:", "blob:", "*.vultrobjects.com", "*.blob.vercel-storage.com"],
+      connectSrc: ["'self'", "https:", "wss:", "ws:"],
+      fontSrc: ["'self'", "https:", "data:"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'", "blob:", "https:"],
+      frameSrc: ["'self'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // Required for Socket.io
+}));
+
+// General API rate limiter
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Strict rate limiter for auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Limit each IP to 5 auth attempts
+  message: 'Too many authentication attempts, please try again later.',
+  skipSuccessfulRequests: true,
+});
+
+// Very strict limiter for expensive operations (Marble API)
+const strictLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // 10 requests per hour
+  message: 'Rate limit exceeded for this operation. Please try again later.',
+  skipFailedRequests: true,
+});
+
+// Apply general rate limiting to all routes
+app.use('/api/', apiLimiter);
+
+// ============================================
+// INPUT VALIDATION MIDDLEWARE
+// ============================================
+
+// Validation rules for scene creation
+const validateSceneCreation = [
+  body('title').trim().isLength({ min: 1, max: 100 }).escape(),
+  body('description').optional().trim().isLength({ max: 500 }).escape(),
+  body('concept').trim().isLength({ min: 1, max: 200 }).escape(),
+  body('isPublic').optional().isBoolean().toBoolean(),
+  body('allowRemix').optional().isBoolean().toBoolean(),
+  body('tags').optional().isArray({ max: 10 }),
+  body('thumbnailBase64').optional().isBase64(),
+];
+
+// Validation rules for scene updates
+const validateSceneUpdate = [
+  body('title').optional().trim().isLength({ min: 1, max: 100 }).escape(),
+  body('description').optional().trim().isLength({ max: 500 }).escape(),
+  body('isPublic').optional().isBoolean().toBoolean(),
+  body('allowRemix').optional().isBoolean().toBoolean(),
+];
+
+// Helper to handle validation errors
+const handleValidationErrors = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      error: 'Invalid input',
+      details: errors.array()
+    });
+  }
+  next();
+};
 
 // Rate limiting for expensive API calls (Marble + Gemini)
 // Track requests per IP: { ip: [timestamp1, timestamp2, ...] }
@@ -327,7 +415,8 @@ const CREDITS_PACKAGES = {
 };
 
 // Proxy endpoint for Marble API - handles image upload and world generation
-app.post('/api/marble/convert', upload.single('image'), handleMulterError, async (req, res) => {
+// SECURITY: Apply strict rate limiting to this expensive operation
+app.post('/api/marble/convert', strictLimiter, upload.single('image'), handleMulterError, async (req, res) => {
   try {
     console.log('🔄 [PROXY] Received Marble world generation request');
     console.log('📦 [PROXY] Request body keys:', Object.keys(req.body || {}));
@@ -889,9 +978,14 @@ app.get('/api/scenes', async (req, res) => {
 
 /**
  * POST /api/scenes
- * Create a new scene with splat file upload
+ * Create a new scene with splat file upload - WITH VALIDATION
  */
-app.post('/api/scenes', authMiddleware, uploadLarge.single('splatFile'), async (req, res) => {
+app.post('/api/scenes',
+  authMiddleware,
+  uploadLarge.single('splatFile'),
+  validateSceneCreation,
+  handleValidationErrors,
+  async (req, res) => {
   try {
     const { title, description, concept, tags, isPublic, thumbnailBase64 } = req.body;
     
@@ -930,19 +1024,19 @@ app.post('/api/scenes', authMiddleware, uploadLarge.single('splatFile'), async (
     const insertResult = await scenesCollection.insertOne(sceneData);
     const sceneId = insertResult.insertedId;
 
-    // Upload splat file to Vultr Object Storage
+    // Upload splat file to Vercel Blob Storage
     const splatKey = generateSplatKey(user._id.toString(), sceneId.toString());
     const splatUrl = await uploadFile(req.file.buffer, splatKey, 'application/octet-stream');
 
     // Upload thumbnail if provided
-    let vultrThumbnailUrl = null;
+    let blobThumbnailUrl = null;
     if (thumbnailBase64) {
       try {
         const thumbnailBuffer = Buffer.from(thumbnailBase64, 'base64');
         const thumbnailKey = `scenes/${user._id}/${sceneId}/thumbnail.png`;
-        console.log(`📤 [SCENES] Uploading thumbnail to Vultr: ${thumbnailKey}`);
-        vultrThumbnailUrl = await uploadFile(thumbnailBuffer, thumbnailKey, 'image/png');
-        console.log(`✅ [SCENES] Uploaded thumbnail to Vultr: ${vultrThumbnailUrl}`);
+        console.log(`📤 [SCENES] Uploading thumbnail to Vercel Blob: ${thumbnailKey}`);
+        blobThumbnailUrl = await uploadFile(thumbnailBuffer, thumbnailKey, 'image/png');
+        console.log(`✅ [SCENES] Uploaded thumbnail to Vercel Blob: ${blobThumbnailUrl}`);
       } catch (thumbError) {
         console.warn(`⚠️ [SCENES] Thumbnail upload error:`, thumbError.message);
       }
@@ -950,8 +1044,8 @@ app.post('/api/scenes', authMiddleware, uploadLarge.single('splatFile'), async (
 
     // Update scene with splat URL and thumbnail URL
     const updateData = { splatUrl, splatKey };
-    if (vultrThumbnailUrl) {
-      updateData.thumbnailUrl = vultrThumbnailUrl;
+    if (blobThumbnailUrl) {
+      updateData.thumbnailUrl = blobThumbnailUrl;
     }
     await scenesCollection.updateOne(
       { _id: sceneId },
@@ -960,7 +1054,7 @@ app.post('/api/scenes', authMiddleware, uploadLarge.single('splatFile'), async (
 
     // Auto-generate thumbnail if not provided (async, don't block response)
     const GEMINI_API_KEY_FOR_THUMB = process.env.VITE_GEMINI_API_KEY;
-    if (!vultrThumbnailUrl && GEMINI_API_KEY_FOR_THUMB) {
+    if (!blobThumbnailUrl && GEMINI_API_KEY_FOR_THUMB) {
       (async () => {
         try {
           console.log(`🎨 [SCENES] Auto-generating thumbnail for uploaded scene: ${sceneId}`);
@@ -1017,7 +1111,7 @@ TECHNICAL:
       _id: sceneId.toString(),
       ...sceneData,
       splatUrl,
-      thumbnailUrl: vultrThumbnailUrl,
+      thumbnailUrl: blobThumbnailUrl,
     });
   } catch (error) {
     console.error('❌ [SCENES] Create error:', error);
@@ -1554,20 +1648,20 @@ app.post('/api/scenes/:id/orchestration', authMiddleware, async (req, res) => {
 
 /**
  * GET /api/proxy/splat
- * Proxy splat files from Vultr or Marble CDN to avoid CORS issues
+ * Proxy splat files from Vercel Blob or Marble CDN to avoid CORS issues
  */
 app.get('/api/proxy/splat', async (req, res) => {
   try {
     const { url } = req.query;
-    
+
     if (!url) {
       return res.status(400).json({ error: 'URL parameter required' });
     }
 
-    // Validate it's a Vultr or Marble CDN URL
-    const isValidUrl = url.includes('vultrobjects.com') || url.includes('cdn.marble.worldlabs.ai');
+    // Validate it's a Vercel Blob or Marble CDN URL
+    const isValidUrl = url.includes('blob.vercel-storage.com') || url.includes('cdn.marble.worldlabs.ai');
     if (!isValidUrl) {
-      return res.status(400).json({ error: 'Invalid URL - must be Vultr Object Storage or Marble CDN' });
+      return res.status(400).json({ error: 'Invalid URL - must be Vercel Blob Storage or Marble CDN' });
     }
 
     console.log('🔄 [PROXY] Fetching splat from:', url);
@@ -1598,12 +1692,12 @@ app.get('/api/proxy/splat', async (req, res) => {
 
 /**
  * DELETE /api/scenes/:id
- * Delete own scene
+ * Delete own scene - WITH SECURITY FIXES
  */
 app.delete('/api/scenes/:id', authMiddleware, async (req, res) => {
   try {
     const sceneId = req.params.id;
-    
+
     if (!ObjectId.isValid(sceneId)) {
       return res.status(400).json({ error: 'Invalid scene ID' });
     }
@@ -1619,21 +1713,30 @@ app.delete('/api/scenes/:id', authMiddleware, async (req, res) => {
 
     // Find scene and verify ownership
     const scene = await scenesCollection.findOne({ _id: new ObjectId(sceneId) });
-    
+
     if (!scene) {
       return res.status(404).json({ error: 'Scene not found' });
     }
 
-    if (scene.creatorId.toString() !== user._id.toString()) {
+    // SECURITY: Check both creatorId and userId fields for ownership
+    const isOwner = scene.creatorId?.toString() === user._id.toString() ||
+                    scene.userId === req.user.uid ||
+                    scene.userUid === req.user.uid;
+
+    // Allow admin override
+    const isAdmin = req.user.email && ['stpnhh@gmail.com'].includes(req.user.email);
+
+    if (!isOwner && !isAdmin) {
+      console.warn(`⚠️ [SECURITY] Unauthorized delete attempt by ${req.user.uid} for scene ${sceneId}`);
       return res.status(403).json({ error: 'Not authorized to delete this scene' });
     }
 
     // Delete file from storage if it exists
-    if (scene.splatKey) {
+    if (scene.splatKey || scene.splatUrl) {
       try {
-        await deleteFile(scene.splatKey);
+        await deleteFile(scene.splatKey || scene.splatUrl);
       } catch (error) {
-        console.warn('⚠️ [SCENES] Failed to delete file from storage:', error);
+        console.warn('⚠️ [SCENES] Failed to delete file from storage:', error.message);
         // Continue with database deletion even if storage deletion fails
       }
     }
@@ -1641,10 +1744,12 @@ app.delete('/api/scenes/:id', authMiddleware, async (req, res) => {
     // Delete scene from database
     await scenesCollection.deleteOne({ _id: scene._id });
 
+    console.log(`✅ [SCENES] Scene ${sceneId} deleted by user ${req.user.uid}`);
     res.json({ message: 'Scene deleted successfully' });
   } catch (error) {
-    console.error('❌ [SCENES] Delete error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('❌ [SCENES] Delete error:', error.message);
+    // SECURITY: Don't expose internal error details
+    res.status(500).json({ error: 'Failed to delete scene. Please try again.' });
   }
 });
 
@@ -1693,8 +1798,8 @@ app.post('/api/scenes/from-url', authMiddleware, async (req, res) => {
     // Check if URL is from Marble CDN - save directly instead of downloading/uploading
     const isMarbleCdn = externalSplatUrl.includes('cdn.marble.worldlabs.ai');
     
-    let vultrSplatUrl = externalSplatUrl; // Use Marble CDN URL directly
-    let vultrColliderUrl = externalColliderUrl || null;
+    let blobSplatUrl = externalSplatUrl; // Use Marble CDN URL directly
+    let blobColliderUrl = externalColliderUrl || null;
     let splatKey = null;
     let sceneId = null;
     
@@ -1710,7 +1815,7 @@ app.post('/api/scenes/from-url', authMiddleware, async (req, res) => {
       isPublic: isPublic === 'true' || isPublic === true || isPublic === undefined,
       viewCount: 0,
       worldId: worldId || null,
-      hasCollider: !!vultrColliderUrl,
+      hasCollider: !!blobColliderUrl,
       thumbnailUrl: null,
       orchestration: orchestration ? {
         learningObjectives: orchestration.learningObjectives || [],
@@ -1757,46 +1862,46 @@ app.post('/api/scenes/from-url', authMiddleware, async (req, res) => {
 
       // Upload splat file to Vultr Object Storage
       splatKey = generateSplatKey(user._id.toString(), sceneId.toString());
-      console.log(`📤 [SCENES] Uploading splat to Vultr: ${splatKey}`);
-      vultrSplatUrl = await uploadFile(splatBuffer, splatKey, 'application/octet-stream');
-      console.log(`✅ [SCENES] Uploaded splat to Vultr: ${vultrSplatUrl}`);
+      console.log(`📤 [SCENES] Uploading splat to Vercel Blob: ${splatKey}`);
+      blobSplatUrl = await uploadFile(splatBuffer, splatKey, 'application/octet-stream');
+      console.log(`✅ [SCENES] Uploaded splat to Vercel Blob: ${blobSplatUrl}`);
       
       // Upload collider mesh if available
       if (colliderBuffer) {
         const colliderKey = `scenes/${user._id}/${sceneId}/collider.glb`;
-        console.log(`📤 [SCENES] Uploading collider to Vultr: ${colliderKey}`);
-        vultrColliderUrl = await uploadFile(colliderBuffer, colliderKey, 'model/gltf-binary');
-        console.log(`✅ [SCENES] Uploaded collider to Vultr: ${vultrColliderUrl}`);
+        console.log(`📤 [SCENES] Uploading collider to Vercel Blob: ${colliderKey}`);
+        blobColliderUrl = await uploadFile(colliderBuffer, colliderKey, 'model/gltf-binary');
+        console.log(`✅ [SCENES] Uploaded collider to Vercel Blob: ${blobColliderUrl}`);
       }
     } else {
       console.log('✅ [SCENES] Using Marble CDN URL directly (no download/upload needed):', externalSplatUrl);
     }
 
     // Upload thumbnail if provided (as actual image file, not base64 in DB)
-    let vultrThumbnailUrl = null;
+    let blobThumbnailUrl = null;
     if (thumbnailBase64) {
       try {
         const thumbnailBuffer = Buffer.from(thumbnailBase64, 'base64');
         const thumbnailKey = `scenes/${user._id}/${sceneId}/thumbnail.png`;
-        console.log(`📤 [SCENES] Uploading thumbnail to Vultr: ${thumbnailKey}`);
-        vultrThumbnailUrl = await uploadFile(thumbnailBuffer, thumbnailKey, 'image/png');
-        console.log(`✅ [SCENES] Uploaded thumbnail to Vultr: ${vultrThumbnailUrl}`);
+        console.log(`📤 [SCENES] Uploading thumbnail to Vercel Blob: ${thumbnailKey}`);
+        blobThumbnailUrl = await uploadFile(thumbnailBuffer, thumbnailKey, 'image/png');
+        console.log(`✅ [SCENES] Uploaded thumbnail to Vercel Blob: ${blobThumbnailUrl}`);
       } catch (thumbError) {
         console.warn(`⚠️ [SCENES] Thumbnail upload error:`, thumbError.message);
       }
     }
 
-    // Update scene with all URLs (vultrColliderUrl already set above if needed)
+    // Update scene with all URLs (blobColliderUrl already set above if needed)
     const updateData = { 
-      splatUrl: vultrSplatUrl, 
+      splatUrl: blobSplatUrl, 
       splatKey, 
       originalSplatUrl: externalSplatUrl 
     };
-    if (vultrColliderUrl) {
-      updateData.colliderMeshUrl = vultrColliderUrl;
+    if (blobColliderUrl) {
+      updateData.colliderMeshUrl = blobColliderUrl;
     }
-    if (vultrThumbnailUrl) {
-      updateData.thumbnailUrl = vultrThumbnailUrl;
+    if (blobThumbnailUrl) {
+      updateData.thumbnailUrl = blobThumbnailUrl;
     }
     
     await scenesCollection.updateOne(
@@ -1809,9 +1914,9 @@ app.post('/api/scenes/from-url', authMiddleware, async (req, res) => {
     res.status(201).json({
       _id: sceneId.toString(),
       ...sceneData,
-      splatUrl: vultrSplatUrl,
-      colliderMeshUrl: vultrColliderUrl,
-      thumbnailUrl: vultrThumbnailUrl,
+      splatUrl: blobSplatUrl,
+      colliderMeshUrl: blobColliderUrl,
+      thumbnailUrl: blobThumbnailUrl,
     });
   } catch (error) {
     console.error('❌ [SCENES] Create from URL error:', error);
@@ -2717,6 +2822,38 @@ process.on('uncaughtException', (error) => {
 process.on('unhandledRejection', (reason, promise) => {
   console.error('❌ [PROCESS] Unhandled Rejection at:', promise, 'reason:', reason);
   // Don't exit - keep server running
+});
+
+// ============================================
+// GLOBAL ERROR HANDLER - MUST BE LAST MIDDLEWARE
+// ============================================
+app.use((err, req, res, next) => {
+  // Log the full error internally
+  console.error('❌ [ERROR]', new Date().toISOString(), err.stack || err);
+
+  // Don't leak error details in production
+  const isDevelopment = process.env.NODE_ENV === 'development';
+
+  if (err.name === 'ValidationError') {
+    return res.status(400).json({
+      error: 'Validation failed',
+      details: isDevelopment ? err.message : undefined
+    });
+  }
+
+  if (err.name === 'UnauthorizedError') {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({ error: 'File too large' });
+  }
+
+  // Default error response
+  res.status(err.status || 500).json({
+    error: isDevelopment ? err.message : 'Internal server error',
+    requestId: req.id || 'unknown'
+  });
 });
 
 // Listen on all interfaces (0.0.0.0) for Railway/cloud deployments

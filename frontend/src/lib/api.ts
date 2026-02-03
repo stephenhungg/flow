@@ -338,4 +338,3 @@ export async function verifyCheckoutSession(
 
   return response.json();
 }
-

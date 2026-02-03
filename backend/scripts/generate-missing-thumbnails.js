@@ -6,7 +6,7 @@
 import dotenv from 'dotenv';
 import { MongoClient, ObjectId } from 'mongodb';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { uploadFile, deleteFile, extractKeyFromUrl } from '../server/lib/storage.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -19,58 +19,38 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 const MONGODB_URI = process.env.MONGODB_URI;
 const GEMINI_API_KEY = process.env.VITE_GEMINI_API_KEY;
 
-// Vultr S3 config
-const s3Client = new S3Client({
-  region: 'ewr1',
-  endpoint: `https://${process.env.VULTR_STORAGE_HOSTNAME}`,
-  credentials: {
-    accessKeyId: process.env.VULTR_STORAGE_ACCESS_KEY,
-    secretAccessKey: process.env.VULTR_STORAGE_SECRET_KEY,
-  },
-  forcePathStyle: false,
-});
-
-const BUCKET = process.env.VULTR_STORAGE_BUCKET;
-
-/**
- * Upload file to Vultr Object Storage
- */
-async function uploadFile(buffer, key, contentType) {
-  const command = new PutObjectCommand({
-    Bucket: BUCKET,
-    Key: key,
-    Body: buffer,
-    ContentType: contentType,
-    ACL: 'public-read', // Make files publicly accessible
-  });
-
-  await s3Client.send(command);
-  const url = `https://${BUCKET}.${process.env.VULTR_STORAGE_HOSTNAME}/${key}`;
-  return url;
+if (!MONGODB_URI || !GEMINI_API_KEY) {
+  console.error('❌ Missing required environment variables');
+  process.exit(1);
 }
 
-/**
- * Delete file from Vultr Object Storage
- */
-async function deleteFile(key) {
-  try {
-    const command = new DeleteObjectCommand({
-      Bucket: BUCKET,
-      Key: key,
-    });
-    await s3Client.send(command);
-    console.log(`   🗑️  Deleted: ${key}`);
-  } catch (error) {
-    console.warn(`   ⚠️  Failed to delete ${key}:`, error.message);
-  }
-}
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 /**
  * Generate thumbnail for a scene
  */
-async function generateThumbnail(scene, genAI) {
-  console.log(`\n🎨 Generating thumbnail for: "${scene.title}" (${scene._id})`);
-  console.log(`   Concept: ${scene.concept || scene.title}`);
+async function generateThumbnail(scene, forceRegenerate = false) {
+  const sceneId = scene._id.toString();
+  console.log(`\n🎨 Processing scene: ${scene.title} (${sceneId})`);
+
+  // Skip if thumbnail already exists (unless force regenerate)
+  if (scene.thumbnailUrl && !forceRegenerate) {
+    console.log(`✅ Thumbnail already exists`);
+    return null;
+  }
+
+  // If regenerating, delete the old thumbnail
+  if (scene.thumbnailUrl && forceRegenerate) {
+    console.log(`🗑️ Deleting old thumbnail...`);
+    try {
+      // Extract the key from the URL if needed
+      const keyToDelete = extractKeyFromUrl(scene.thumbnailUrl);
+      await deleteFile(keyToDelete);
+      console.log(`✅ Old thumbnail deleted`);
+    } catch (error) {
+      console.warn(`⚠️ Could not delete old thumbnail: ${error.message}`);
+    }
+  }
 
   const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp-image-generation' });
 
@@ -88,141 +68,110 @@ TECHNICAL:
 - High quality, sharp details
 - No text, no borders, no UI elements`;
 
-  const result = await model.generateContent({
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: {
-      responseModalities: ['image', 'text'],
-    },
-  });
+  try {
+    console.log(`🎨 Generating thumbnail...`);
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseModalities: ['image', 'text'],
+      },
+    });
+    const response = await result.response;
 
-  const response = await result.response;
-  const imagePart = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData);
-  
-  if (!imagePart?.inlineData) {
-    throw new Error('No image data in Gemini response');
+    const imagePart = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData);
+    if (imagePart?.inlineData) {
+      const imageData = imagePart.inlineData.data;
+      const imageMimeType = imagePart.inlineData.mimeType || 'image/png';
+      const imageBuffer = Buffer.from(imageData, 'base64');
+
+      const userId = scene.userId;
+      const thumbnailKey = `scenes/${userId}/${sceneId}/thumbnail.png`;
+      const thumbnailUrl = await uploadFile(imageBuffer, thumbnailKey, imageMimeType);
+
+      console.log(`✅ Thumbnail generated and uploaded: ${thumbnailUrl}`);
+      return thumbnailUrl;
+    } else {
+      console.error(`❌ No image generated for scene ${sceneId}`);
+      return null;
+    }
+  } catch (error) {
+    console.error(`❌ Error generating thumbnail for scene ${sceneId}:`, error.message);
+    return null;
   }
-
-  const imageData = imagePart.inlineData.data;
-  const imageMimeType = imagePart.inlineData.mimeType || 'image/png';
-  const imageBuffer = Buffer.from(imageData, 'base64');
-
-  console.log(`   ✅ Generated: ${imageBuffer.length} bytes`);
-
-  // Upload to Vultr
-  const thumbnailKey = `scenes/${scene.creatorId}/${scene._id}/thumbnail.png`;
-  const thumbnailUrl = await uploadFile(imageBuffer, thumbnailKey, imageMimeType);
-  console.log(`   ✅ Uploaded: ${thumbnailUrl}`);
-
-  return thumbnailUrl;
 }
 
-/**
- * Main function
- */
 async function main() {
-  console.log('🚀 Starting thumbnail generation for missing scenes...\n');
+  // Parse command line arguments
+  const args = process.argv.slice(2);
+  const forceRegenerate = args.includes('--force');
+  const limitArg = args.find(arg => arg.startsWith('--limit='));
+  const limit = limitArg ? parseInt(limitArg.split('=')[1]) : null;
 
-  if (!MONGODB_URI || !GEMINI_API_KEY) {
-    console.error('❌ Missing required environment variables (MONGODB_URI, VITE_GEMINI_API_KEY)');
-    process.exit(1);
+  console.log('🚀 Starting thumbnail generation script');
+  if (forceRegenerate) {
+    console.log('⚠️ Force regenerate mode - will replace existing thumbnails');
+  }
+  if (limit) {
+    console.log(`📊 Processing limit: ${limit} scenes`);
   }
 
-  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
   const client = new MongoClient(MONGODB_URI);
-  
+
   try {
     await client.connect();
-    console.log('✅ Connected to MongoDB\n');
+    console.log('✅ Connected to MongoDB');
 
     const db = client.db('flow');
-    const scenes = db.collection('scenes');
+    const scenesCollection = db.collection('scenes');
 
-    // Find ALL scenes (we'll delete existing thumbnails and regenerate)
-    const allScenes = await scenes.find({}).toArray();
-    
-    console.log(`📋 Found ${allScenes.length} total scenes`);
-    console.log(`🗑️  Deleting existing thumbnails first...\n`);
+    // Find scenes based on whether we're regenerating or not
+    const query = forceRegenerate ? {} : { thumbnailUrl: { $in: [null, '', undefined] } };
+    const scenes = await scenesCollection
+      .find(query)
+      .limit(limit || 0)
+      .toArray();
 
-    // Delete existing thumbnails from storage
-    let deletedCount = 0;
-    for (const scene of allScenes) {
-      if (scene.thumbnailUrl) {
-        try {
-          // Extract key from URL (format: https://bucket.hostname/key)
-          const url = scene.thumbnailUrl;
-          if (url.includes('/scenes/')) {
-            const keyIndex = url.indexOf('/scenes/');
-            const key = url.substring(keyIndex + 1); // Remove leading slash
-            await deleteFile(key);
-            deletedCount++;
-          }
-        } catch (error) {
-          console.warn(`   ⚠️  Could not extract key from URL: ${scene.thumbnailUrl}`);
-        }
-      }
-    }
-    console.log(`✅ Deleted ${deletedCount} existing thumbnails from storage\n`);
-
-    // Clear thumbnail URLs in database
-    await scenes.updateMany(
-      { thumbnailUrl: { $exists: true, $ne: null } },
-      { $set: { thumbnailUrl: null } }
-    );
-    console.log(`✅ Cleared thumbnail URLs in database\n`);
-
-    // Now process all scenes to regenerate thumbnails
-    const scenesToProcess = allScenes;
+    console.log(`\n📊 Found ${scenes.length} scenes to process`);
 
     let successCount = 0;
     let errorCount = 0;
 
-    for (const scene of scenesToProcess) {
-      console.log(`${'='.repeat(60)}`);
-      console.log(`Processing: "${scene.title}" (${scene._id})`);
-      console.log(`Concept: ${scene.concept || scene.title}`);
-      console.log(`${'='.repeat(60)}`);
+    for (const scene of scenes) {
+      const thumbnailUrl = await generateThumbnail(scene, forceRegenerate);
 
-      try {
-        const thumbnailUrl = await generateThumbnail(scene, genAI);
-        
-        // Update scene in MongoDB
-        await scenes.updateOne(
+      if (thumbnailUrl) {
+        // Update the scene with the new thumbnail
+        await scenesCollection.updateOne(
           { _id: scene._id },
-          { 
-            $set: { 
+          {
+            $set: {
               thumbnailUrl,
-              updatedAt: new Date() 
-            } 
+              updatedAt: new Date()
+            }
           }
         );
-
-        console.log(`✅ Successfully updated scene with thumbnail`);
         successCount++;
-
-        // Rate limiting - wait between requests (1 second)
-        if (scenesToProcess.indexOf(scene) < scenesToProcess.length - 1) {
-          console.log(`⏳ Waiting 1 second before next scene...\n`);
-          await new Promise(r => setTimeout(r, 1000));
-        }
-
-      } catch (err) {
-        console.error(`❌ Error processing scene: ${err.message}`);
+      } else if (!scene.thumbnailUrl || forceRegenerate) {
+        // Only count as error if we tried to generate (not if it already had one)
         errorCount++;
       }
+
+      // Add a small delay to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
-    console.log(`\n${'='.repeat(60)}`);
-    console.log(`📊 SUMMARY`);
-    console.log(`${'='.repeat(60)}`);
-    console.log(`✅ Successfully generated: ${successCount}`);
-    console.log(`❌ Errors: ${errorCount}`);
-    console.log(`${'='.repeat(60)}\n`);
+    console.log(`\n✅ Completed!`);
+    console.log(`   - Success: ${successCount}`);
+    console.log(`   - Errors: ${errorCount}`);
+    console.log(`   - Skipped: ${scenes.length - successCount - errorCount}`);
 
+  } catch (error) {
+    console.error('❌ Script error:', error);
   } finally {
     await client.close();
     console.log('👋 Disconnected from MongoDB');
   }
 }
 
+// Run the script
 main().catch(console.error);
-

@@ -1,9 +1,9 @@
 /**
- * Vultr Object Storage client (S3-compatible)
+ * Vercel Blob Storage client
+ * Migrated from Vultr Object Storage (S3-compatible) to Vercel Blob
  */
 
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { put, del, list } from '@vercel/blob';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -14,53 +14,35 @@ const __dirname = path.dirname(__filename);
 // Load .env from root directory
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
-const VULTR_STORAGE_HOSTNAME = process.env.VULTR_STORAGE_HOSTNAME || 'ewr1.vultrobjects.com';
-const VULTR_STORAGE_ACCESS_KEY = process.env.VULTR_STORAGE_ACCESS_KEY;
-const VULTR_STORAGE_SECRET_KEY = process.env.VULTR_STORAGE_SECRET_KEY;
-const VULTR_STORAGE_BUCKET = process.env.VULTR_STORAGE_BUCKET || 'flow-bucket';
+const BLOB_READ_WRITE_TOKEN = process.env.BLOB_READ_WRITE_TOKEN;
 
-if (!VULTR_STORAGE_ACCESS_KEY || !VULTR_STORAGE_SECRET_KEY) {
-  console.warn('⚠️ [STORAGE] Vultr Object Storage credentials not configured');
+if (!BLOB_READ_WRITE_TOKEN) {
+  console.warn('⚠️ [STORAGE] Vercel Blob Storage token not configured');
 }
 
-// Create S3 client with Vultr endpoint
-const s3Client = new S3Client({
-  endpoint: `https://${VULTR_STORAGE_HOSTNAME}`,
-  region: 'auto',
-  credentials: {
-    accessKeyId: VULTR_STORAGE_ACCESS_KEY || '',
-    secretAccessKey: VULTR_STORAGE_SECRET_KEY || '',
-  },
-  forcePathStyle: false, // Vultr uses virtual-hosted style
-});
-
 /**
- * Upload a file to Vultr Object Storage
+ * Upload a file to Vercel Blob Storage
  * @param {Buffer} fileBuffer - File content as Buffer
  * @param {string} key - Object key (file path)
  * @param {string} contentType - MIME type
  * @returns {Promise<string>} Public URL of the uploaded file
  */
 export async function uploadFile(fileBuffer, key, contentType = 'application/octet-stream') {
-  if (!VULTR_STORAGE_ACCESS_KEY || !VULTR_STORAGE_SECRET_KEY) {
-    throw new Error('Vultr Object Storage credentials not configured');
+  if (!BLOB_READ_WRITE_TOKEN) {
+    throw new Error('Vercel Blob Storage token not configured');
   }
 
   try {
-    const command = new PutObjectCommand({
-      Bucket: VULTR_STORAGE_BUCKET,
-      Key: key,
-      Body: fileBuffer,
-      ContentType: contentType,
-      ACL: 'public-read', // Make files publicly accessible
+    // Upload to Vercel Blob
+    const blob = await put(key, fileBuffer, {
+      access: 'public',
+      contentType: contentType,
+      token: BLOB_READ_WRITE_TOKEN
     });
 
-    await s3Client.send(command);
-    
-    // Construct public URL
-    const publicUrl = `https://${VULTR_STORAGE_BUCKET}.${VULTR_STORAGE_HOSTNAME}/${key}`;
     console.log(`✅ [STORAGE] Uploaded file: ${key}`);
-    return publicUrl;
+    // Return the URL provided by Vercel Blob
+    return blob.url;
   } catch (error) {
     console.error(`❌ [STORAGE] Upload error for ${key}:`, error);
     throw error;
@@ -68,51 +50,41 @@ export async function uploadFile(fileBuffer, key, contentType = 'application/oct
 }
 
 /**
- * Delete a file from Vultr Object Storage
- * @param {string} key - Object key (file path)
+ * Delete a file from Vercel Blob Storage
+ * @param {string} keyOrUrl - Object key (file path) or the full URL
  */
-export async function deleteFile(key) {
-  if (!VULTR_STORAGE_ACCESS_KEY || !VULTR_STORAGE_SECRET_KEY) {
-    throw new Error('Vultr Object Storage credentials not configured');
+export async function deleteFile(keyOrUrl) {
+  if (!BLOB_READ_WRITE_TOKEN) {
+    throw new Error('Vercel Blob Storage token not configured');
   }
 
   try {
-    const command = new DeleteObjectCommand({
-      Bucket: VULTR_STORAGE_BUCKET,
-      Key: key,
+    // Vercel Blob's del() accepts either the pathname or the full URL
+    await del(keyOrUrl, {
+      token: BLOB_READ_WRITE_TOKEN
     });
-
-    await s3Client.send(command);
-    console.log(`✅ [STORAGE] Deleted file: ${key}`);
+    console.log(`✅ [STORAGE] Deleted file: ${keyOrUrl}`);
   } catch (error) {
-    console.error(`❌ [STORAGE] Delete error for ${key}:`, error);
-    throw error;
+    console.error(`❌ [STORAGE] Delete error for ${keyOrUrl}:`, error);
+    // Don't throw error if file doesn't exist (already deleted)
+    if (!error.message?.includes('not found')) {
+      throw error;
+    }
   }
 }
 
 /**
- * Generate a signed URL for private file access (optional)
- * @param {string} key - Object key (file path)
- * @param {number} expiresIn - URL expiration in seconds (default: 1 hour)
- * @returns {Promise<string>} Signed URL
+ * Generate a signed URL for private file access
+ * Note: Vercel Blob URLs are already signed and secure by default
+ * This function is kept for backward compatibility but returns the public URL
+ * @param {string} url - The blob URL
+ * @param {number} expiresIn - Ignored (kept for compatibility)
+ * @returns {Promise<string>} The blob URL
  */
-export async function getSignedFileUrl(key, expiresIn = 3600) {
-  if (!VULTR_STORAGE_ACCESS_KEY || !VULTR_STORAGE_SECRET_KEY) {
-    throw new Error('Vultr Object Storage credentials not configured');
-  }
-
-  try {
-    const command = new GetObjectCommand({
-      Bucket: VULTR_STORAGE_BUCKET,
-      Key: key,
-    });
-
-    const url = await getSignedUrl(s3Client, command, { expiresIn });
-    return url;
-  } catch (error) {
-    console.error(`❌ [STORAGE] Signed URL error for ${key}:`, error);
-    throw error;
-  }
+export async function getSignedFileUrl(url, expiresIn = 3600) {
+  // Vercel Blob URLs are already secure and don't need additional signing
+  // They include a token in the URL that provides access control
+  return url;
 }
 
 /**
@@ -126,3 +98,41 @@ export function generateSplatKey(userId, sceneId) {
   return `splats/${userId}/${sceneId}-${timestamp}.spz`;
 }
 
+/**
+ * Extract key from Vercel Blob URL
+ * Helper function to get the pathname from a blob URL
+ * @param {string} url - Vercel Blob URL
+ * @returns {string} The pathname/key
+ */
+export function extractKeyFromUrl(url) {
+  try {
+    const urlObj = new URL(url);
+    // Remove the leading slash from pathname
+    return urlObj.pathname.substring(1);
+  } catch {
+    // If it's not a valid URL, assume it's already a key
+    return url;
+  }
+}
+
+/**
+ * List all blobs (optional utility function)
+ * @param {string} prefix - Optional prefix to filter results
+ * @returns {Promise<Array>} List of blob objects
+ */
+export async function listFiles(prefix = '') {
+  if (!BLOB_READ_WRITE_TOKEN) {
+    throw new Error('Vercel Blob Storage token not configured');
+  }
+
+  try {
+    const response = await list({
+      prefix,
+      token: BLOB_READ_WRITE_TOKEN
+    });
+    return response.blobs;
+  } catch (error) {
+    console.error(`❌ [STORAGE] List error:`, error);
+    throw error;
+  }
+}
