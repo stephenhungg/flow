@@ -527,15 +527,19 @@ app.post('/api/marble/convert', strictLimiter, upload.single('image'), handleMul
     const operation = await generateResponse.json();
     console.log('✅ [PROXY] World generation started, operation_id:', operation.operation_id);
 
-    // Step 3: Poll operation until complete
+    // Step 3: Poll operation until complete with exponential backoff
     console.log('⏳ [PROXY] Step 3: Polling operation until complete...');
     const operationId = operation.operation_id;
-    const maxAttempts = 120; // 10 minutes max (5s intervals)
-    let attempts = 0;
+    const maxRetries = 3;
+    const backoffDelays = [5000, 15000, 45000]; // 5s, 15s, 45s between retries
+    let retryAttempt = 0;
+    let completed = false;
 
-    while (attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, 5000)); // Poll every 5 seconds
-      attempts++;
+    while (retryAttempt < maxRetries) {
+      const delay = backoffDelays[retryAttempt];
+      console.log(`⏳ [PROXY] Waiting ${delay / 1000}s before polling (attempt ${retryAttempt + 1}/${maxRetries})...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      retryAttempt++;
 
       const statusResponse = await fetch(`${MARBLE_OPERATIONS_ENDPOINT}/${operationId}`, {
         headers: {
@@ -544,11 +548,12 @@ app.post('/api/marble/convert', strictLimiter, upload.single('image'), handleMul
       });
 
       if (!statusResponse.ok) {
-        throw new Error(`Failed to check operation status: ${statusResponse.status}`);
+        console.error(`❌ [PROXY] Status check failed (attempt ${retryAttempt}/${maxRetries}): ${statusResponse.status}`);
+        continue;
       }
 
       const statusData = await statusResponse.json();
-      console.log(`📊 [PROXY] Operation status (${attempts}/${maxAttempts}):`, statusData.metadata?.progress?.status || 'pending');
+      console.log(`📊 [PROXY] Operation status (${retryAttempt}/${maxRetries}):`, statusData.metadata?.progress?.status || 'pending');
 
       if (statusData.done) {
         if (statusData.error) {
@@ -575,7 +580,7 @@ app.post('/api/marble/convert', strictLimiter, upload.single('image'), handleMul
         }
 
         const worldData = await worldResponse.json();
-        const splatUrl = worldData.assets?.splats?.spz_urls?.full_res || 
+        const splatUrl = worldData.assets?.splats?.spz_urls?.full_res ||
                         worldData.assets?.splats?.spz_urls?.full_res ||
                         worldData.assets?.splats?.spz_urls?.['500k'] ||
                         worldData.assets?.splats?.spz_urls?.['100k'];
@@ -585,6 +590,7 @@ app.post('/api/marble/convert', strictLimiter, upload.single('image'), handleMul
         }
 
         console.log('✅ [PROXY] Splat URL retrieved:', splatUrl);
+        completed = true;
         return res.json({
           splat_url: splatUrl,
           world_id: worldId,
@@ -593,7 +599,9 @@ app.post('/api/marble/convert', strictLimiter, upload.single('image'), handleMul
       }
     }
 
-    throw new Error('Operation timeout after 10 minutes');
+    if (!completed) {
+      throw new Error('Marble API: operation did not complete after 3 retry attempts. Please try again later.');
+    }
 
   } catch (error) {
     console.error('❌ [PROXY] Error:', error);
@@ -2201,11 +2209,18 @@ app.post('/api/pipeline/start', authMiddleware, creditCheckMiddleware, rateLimit
   const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   
   try {
-    const { concept, quality } = req.body;
+    const { quality } = req.body;
     const imageFile = req.file;
 
+    // Validate concept param
+    const concept = typeof req.body.concept === 'string' ? req.body.concept.trim() : '';
+
     if (!concept) {
-      return res.status(400).json({ error: 'Concept is required' });
+      return res.status(400).json({ error: 'Concept is required and cannot be empty' });
+    }
+
+    if (concept.length > 200) {
+      return res.status(400).json({ error: 'Concept must be 200 characters or less' });
     }
 
     // Deduct credits immediately (before generation starts) - skip for admin
@@ -2235,7 +2250,8 @@ app.post('/api/pipeline/start', authMiddleware, creditCheckMiddleware, rateLimit
     });
 
     // Return jobId immediately so frontend can subscribe
-    res.json({ jobId, status: 'started', creditsRemaining: newCredits });
+    // JSON doesn't support Infinity, so send as string for admin users
+    res.json({ jobId, status: 'started', creditsRemaining: newCredits === Infinity ? 'Infinity' : newCredits });
 
     // Run pipeline asynchronously with real-time updates
     runPipeline(jobId, concept, imageFile, quality).catch(async (err) => {
@@ -2601,13 +2617,19 @@ Optimized for tight spaces and detailed exploration.`;
     ];
     let progressIndex = 0;
 
-    const maxAttempts = 120;
-    let attempts = 0;
+    const maxRetries = 3;
+    const backoffDelays = [5000, 15000, 45000]; // 5s, 15s, 45s between retries
+    let retryAttempt = 0;
     let splatUrl = null;
+    const startTime = Date.now();
+    const FIVE_MINUTES = 5 * 60 * 1000;
+    let notifiedSlowProcessing = false;
 
-    while (attempts < maxAttempts) {
-      await sleep(5000);
-      attempts++;
+    while (retryAttempt < maxRetries) {
+      const delay = backoffDelays[retryAttempt];
+      console.log(`⏳ [PIPELINE] Waiting ${delay / 1000}s before polling (attempt ${retryAttempt + 1}/${maxRetries})...`);
+      await sleep(delay);
+      retryAttempt++;
 
       // Update progress
       if (progressIndex < progressSteps.length) {
@@ -2618,6 +2640,14 @@ Optimized for tight spaces and detailed exploration.`;
         progressIndex++;
       }
 
+      // Notify user if processing is taking longer than 5 minutes
+      if (!notifiedSlowProcessing && (Date.now() - startTime) > FIVE_MINUTES) {
+        notifiedSlowProcessing = true;
+        emitPipelineUpdate(jobId, 'creating_world', 75, 'Still working on your scene, this is taking longer than usual...', {
+          details: 'Neural radiance field processing'
+        });
+      }
+
       const statusResponse = await fetch(`${MARBLE_OPERATIONS_ENDPOINT}/${operationId}`, {
         headers: {
           'WLT-Api-Key': MARBLE_API_KEY_LOCAL
@@ -2625,11 +2655,12 @@ Optimized for tight spaces and detailed exploration.`;
       });
 
       if (!statusResponse.ok) {
-        throw new Error(`Failed to check operation status: ${statusResponse.status}`);
+        console.error(`❌ [PIPELINE] Status check failed (attempt ${retryAttempt}/${maxRetries}): ${statusResponse.status}`);
+        continue;
       }
 
       const statusData = await statusResponse.json();
-      console.log(`📊 [PIPELINE] Operation status (${attempts}): ${statusData.metadata?.progress?.status || 'pending'}`);
+      console.log(`📊 [PIPELINE] Operation status (${retryAttempt}/${maxRetries}): ${statusData.metadata?.progress?.status || 'pending'}`);
 
       if (statusData.done) {
         if (statusData.error) {
@@ -2743,7 +2774,7 @@ Optimized for tight spaces and detailed exploration.`;
     }
 
     if (!splatUrl) {
-      throw new Error('Operation timeout after 10 minutes');
+      throw new Error('Marble API: 3D world generation did not complete after 3 retry attempts. Please try again later.');
     }
     
     // Get stored data
