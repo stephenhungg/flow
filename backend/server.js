@@ -247,7 +247,10 @@ function emitPipelineUpdate(jobId, stage, progress, message, data = {}) {
 export { io, emitPipelineUpdate, pipelineJobs };
 
 // Initialize database connection
-connectToDatabase().catch(console.error);
+connectToDatabase().catch((err) => {
+  console.error('❌ [DB] Failed to connect to MongoDB on startup:', err.message);
+  console.error('❌ [DB] Server will continue running but database operations will fail');
+});
 
 // Enable CORS for all routes
 const allowedOrigins = [
@@ -354,9 +357,15 @@ const uploadLarge = multer({
   limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit for splat files
 });
 
-// Debug: Log all requests (BEFORE routes)
+// Request logging middleware - log method, path, status code, response time
 app.use((req, res, next) => {
-  console.log(`📥 [PROXY] ${req.method} ${req.path}`);
+  const start = Date.now();
+  const originalEnd = res.end;
+  res.end = function (...args) {
+    const duration = Date.now() - start;
+    console.log(`📥 [HTTP] ${req.method} ${req.path} ${res.statusCode} ${duration}ms`);
+    originalEnd.apply(this, args);
+  };
   next();
 });
 
@@ -604,8 +613,11 @@ app.post('/api/marble/convert', strictLimiter, upload.single('image'), handleMul
     }
 
   } catch (error) {
-    console.error('❌ [PROXY] Error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('❌ [PROXY] Marble convert error:', error);
+    const userMessage = error.message?.includes('Marble API')
+      ? error.message
+      : '3D generation service encountered an error. Please try again later.';
+    res.status(500).json({ error: userMessage });
   }
 });
 
@@ -679,7 +691,12 @@ app.post('/api/auth/verify', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ [AUTH] Verify error:', error);
-    res.status(401).json({ error: 'Authentication failed', details: error.message });
+    const message = error.code === 'auth/id-token-expired'
+      ? 'Your session has expired. Please sign in again.'
+      : error.code === 'auth/argument-error'
+        ? 'Invalid authentication token. Please sign in again.'
+        : 'Authentication failed. Please try signing in again.';
+    res.status(401).json({ error: message });
   }
 });
 
@@ -718,7 +735,7 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
     });
   } catch (error) {
     console.error('❌ [AUTH] Get me error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to retrieve user profile. Please try again.' });
   }
 });
 
@@ -836,7 +853,7 @@ app.post('/api/credits/create-checkout', authMiddleware, async (req, res) => {
     res.json({ sessionId: session.id, url: session.url });
   } catch (error) {
     console.error('❌ [STRIPE] Checkout error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to create checkout session. Please try again later.' });
   }
 });
 
@@ -901,7 +918,7 @@ app.post('/api/credits/verify-session', authMiddleware, async (req, res) => {
     });
   } catch (error) {
     console.error('❌ [CREDITS] Session verification error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to verify payment session. Please contact support if credits were not added.' });
   }
 });
 
@@ -980,7 +997,7 @@ app.get('/api/scenes', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ [SCENES] List error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to load scenes. Please try again later.' });
   }
 });
 
@@ -1123,7 +1140,7 @@ TECHNICAL:
     });
   } catch (error) {
     console.error('❌ [SCENES] Create error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to create scene. Please try again later.' });
   }
 });
 
@@ -1180,7 +1197,7 @@ app.get('/api/scenes/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ [SCENES] Get error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to load scene details. Please try again later.' });
   }
 });
 
@@ -1326,7 +1343,7 @@ The description should be informative, accessible, and suitable for a learning e
     res.json({ description });
   } catch (error) {
     console.error('❌ [SCENES] Generate description error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to generate description. AI service may be temporarily unavailable.' });
   }
 });
 
@@ -1592,7 +1609,7 @@ TECHNICAL:
 
   } catch (error) {
     console.error('❌ [BATCH] Batch thumbnail generation error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to start batch thumbnail generation. Please try again.' });
   }
 });
 
@@ -1650,7 +1667,7 @@ app.post('/api/scenes/:id/orchestration', authMiddleware, async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     console.error('❌ [SCENES] Save orchestration error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to save educational content. Please try again.' });
   }
 });
 
@@ -1693,8 +1710,8 @@ app.get('/api/proxy/splat', async (req, res) => {
     console.log(`✅ [PROXY] Serving splat: ${buffer.length} bytes`);
     res.send(buffer);
   } catch (error) {
-    console.error('❌ [PROXY] Error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('❌ [PROXY] Splat proxy error:', error);
+    res.status(500).json({ error: 'Failed to load 3D scene file. Please try again.' });
   }
 });
 
@@ -1928,7 +1945,7 @@ app.post('/api/scenes/from-url', authMiddleware, async (req, res) => {
     });
   } catch (error) {
     console.error('❌ [SCENES] Create from URL error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to save scene. Please try again later.' });
   }
 });
 
@@ -1970,7 +1987,7 @@ app.get('/api/users/me/scenes', authMiddleware, async (req, res) => {
     });
   } catch (error) {
     console.error('❌ [SCENES] Get my scenes error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to load your scenes. Please try again later.' });
   }
 });
 
@@ -2018,7 +2035,7 @@ app.get('/api/users/:id/scenes', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ [SCENES] Get user scenes error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to load user scenes. Please try again later.' });
   }
 });
 
@@ -2056,7 +2073,11 @@ app.post('/api/gemini/orchestrate', async (req, res) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('❌ [GEMINI] API error:', response.status, errorText);
-      return res.status(response.status).json({ error: errorText });
+      const statusCode = response.status === 429 ? 429 : 502;
+      const userMessage = response.status === 429
+        ? 'AI service rate limit reached. Please wait a moment and try again.'
+        : 'AI orchestration service temporarily unavailable. Please try again later.';
+      return res.status(statusCode).json({ error: userMessage });
     }
 
     const data = await response.json();
@@ -2064,7 +2085,7 @@ app.post('/api/gemini/orchestrate', async (req, res) => {
     res.json(data);
   } catch (error) {
     console.error('❌ [GEMINI] Orchestrate error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'AI orchestration failed. Please try again later.' });
   }
 });
 
@@ -2114,10 +2135,10 @@ app.post('/api/gemini/generate-image', async (req, res) => {
       }
     }
 
-    res.status(500).json({ error: lastError || 'All Gemini models failed' });
+    res.status(502).json({ error: 'Image generation service temporarily unavailable. Please try again later.' });
   } catch (error) {
     console.error('❌ [GEMINI] Generate image error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Image generation failed. Please try again later.' });
   }
 });
 
@@ -2137,9 +2158,13 @@ app.post('/api/narration/ask', async (req, res) => {
       return res.status(400).json({ error: 'Screenshot and question are required' });
     }
     
+    if (!GEMINI_API_KEY) {
+      return res.status(500).json({ error: 'AI narration service not configured. Please contact support.' });
+    }
+
     console.log('🎤 [NARRATION] Question:', question);
     console.log('🎤 [NARRATION] Concept:', concept);
-    
+
     // 1. Call Gemini Vision with educational prompt
     const prompt = `You are a friendly, knowledgeable educational tour guide helping someone explore a 3D world about "${concept || 'this location'}".
 
@@ -2165,8 +2190,12 @@ Give a helpful, engaging 2-3 sentence response. Include interesting facts, histo
     
     if (!geminiResponse.ok) {
       const errorText = await geminiResponse.text();
-      console.error('❌ [NARRATION] Gemini error:', errorText);
-      throw new Error(`Gemini API error: ${geminiResponse.status}`);
+      console.error('❌ [NARRATION] Gemini error:', geminiResponse.status, errorText);
+      const statusCode = geminiResponse.status === 429 ? 429 : 502;
+      const userMessage = geminiResponse.status === 429
+        ? 'AI service rate limit reached. Please wait a moment before asking another question.'
+        : 'AI narration service temporarily unavailable. Please try again.';
+      return res.status(statusCode).json({ error: userMessage });
     }
     
     const geminiData = await geminiResponse.json();
@@ -2192,7 +2221,7 @@ Give a helpful, engaging 2-3 sentence response. Include interesting facts, histo
     
   } catch (error) {
     console.error('❌ [NARRATION] Error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Voice Q&A failed. Please try again.' });
   }
 });
 
@@ -2276,7 +2305,7 @@ app.post('/api/pipeline/start', authMiddleware, creditCheckMiddleware, rateLimit
 
   } catch (error) {
     console.error('❌ [PIPELINE] Start error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to start generation pipeline. Please try again later.' });
   }
 });
 
@@ -2343,7 +2372,7 @@ app.post('/api/pipeline/:jobId/cancel', authMiddleware, async (req, res) => {
     res.json({ success: true, message: 'Pipeline cancelled' });
   } catch (error) {
     console.error('❌ [PIPELINE] Cancel error:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Failed to cancel pipeline. Please try again.' });
   }
 });
 
@@ -2471,8 +2500,15 @@ Make this look like a frame from a Terrence Malick or Denis Villeneuve film - be
         }
       } catch (geminiError) {
         console.error('❌ [PIPELINE] Gemini image generation failed:', geminiError.message);
-        emitPipelineUpdate(jobId, 'generating_image', 30, 'Using fallback image...', {
-          details: 'Gemini unavailable, using placeholder'
+        emitPipelineUpdate(jobId, 'generating_image', 30, 'Image generation failed, using fallback...', {
+          details: 'AI image service temporarily unavailable',
+          warning: true
+        });
+        io.to(`pipeline:${jobId}`).emit('pipeline:error', {
+          jobId,
+          stage: 'image_generation',
+          message: 'AI image generation service temporarily unavailable. Attempting to continue with fallback.',
+          recoverable: true
         });
         // Use a placeholder - continue without image generation
         imageBuffer = null;
@@ -2517,7 +2553,14 @@ Make this look like a frame from a Terrence Malick or Denis Villeneuve film - be
 
     if (!prepareResponse.ok) {
       const errorText = await prepareResponse.text();
-      throw new Error(`Failed to prepare upload: ${prepareResponse.status} - ${errorText}`);
+      console.error('❌ [PIPELINE] Marble prepare upload failed:', prepareResponse.status, errorText);
+      io.to(`pipeline:${jobId}`).emit('pipeline:error', {
+        jobId,
+        stage: '3d_generation',
+        message: '3D generation service failed to initialize. Please try again later.',
+        recoverable: false
+      });
+      throw new Error(`3D generation service unavailable (prepare upload failed: ${prepareResponse.status})`);
     }
 
     const prepareData = await prepareResponse.json();
@@ -2542,7 +2585,13 @@ Make this look like a frame from a Terrence Malick or Denis Villeneuve film - be
     if (!uploadResponse.ok) {
       const errorText = await uploadResponse.text().catch(() => 'No error body');
       console.error('❌ [PIPELINE] Upload failed:', uploadResponse.status, errorText);
-      throw new Error(`Failed to upload file: ${uploadResponse.status} - ${errorText}`);
+      io.to(`pipeline:${jobId}`).emit('pipeline:error', {
+        jobId,
+        stage: '3d_generation',
+        message: 'Failed to upload image for 3D conversion. Please try again.',
+        recoverable: false
+      });
+      throw new Error(`Failed to upload image for 3D conversion (${uploadResponse.status})`);
     }
     console.log('✅ [PIPELINE] Image uploaded as media asset:', mediaAssetId);
 
@@ -2598,7 +2647,14 @@ Optimized for tight spaces and detailed exploration.`;
 
     if (!generateResponse.ok) {
       const errorText = await generateResponse.text();
-      throw new Error(`Marble API error: ${generateResponse.status} - ${errorText}`);
+      console.error('❌ [PIPELINE] Marble generate failed:', generateResponse.status, errorText);
+      io.to(`pipeline:${jobId}`).emit('pipeline:error', {
+        jobId,
+        stage: '3d_generation',
+        message: '3D world generation service returned an error. Please try again later.',
+        recoverable: false
+      });
+      throw new Error(`3D world generation failed (${generateResponse.status})`);
     }
 
     const operation = await generateResponse.json();
@@ -2817,14 +2873,38 @@ Optimized for tight spaces and detailed exploration.`;
 
   } catch (error) {
     console.error('❌ [PIPELINE] Error:', error.message);
+
+    // Determine which stage failed for a user-friendly message
+    const errorMessage = error.message || 'An unexpected error occurred';
+    let stage = 'unknown';
+    let userMessage = 'Generation pipeline failed. Please try again.';
+
+    if (errorMessage.includes('Marble') || errorMessage.includes('3D') || errorMessage.includes('world') || errorMessage.includes('splat')) {
+      stage = '3d_generation';
+      userMessage = '3D world generation failed. The service may be temporarily unavailable.';
+    } else if (errorMessage.includes('Gemini') || errorMessage.includes('image')) {
+      stage = 'image_generation';
+      userMessage = 'AI image generation failed. Please try again.';
+    } else if (errorMessage.includes('upload')) {
+      stage = 'upload';
+      userMessage = 'File upload failed. Please try again.';
+    }
+
     pipelineJobs.set(jobId, {
       ...pipelineJobs.get(jobId),
       status: 'error',
-      error: error.message
+      error: userMessage
     });
-    
-    emitPipelineUpdate(jobId, 'error', 0, `Pipeline failed: ${error.message}`, {
-      error: error.message
+
+    io.to(`pipeline:${jobId}`).emit('pipeline:error', {
+      jobId,
+      stage,
+      message: userMessage,
+      recoverable: false
+    });
+
+    emitPipelineUpdate(jobId, 'error', 0, userMessage, {
+      error: userMessage
     });
     throw error;
   }
