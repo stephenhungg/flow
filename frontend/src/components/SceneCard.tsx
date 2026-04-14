@@ -86,7 +86,7 @@ export function SceneCard({ scene, onDelete, canDelete = false }: SceneCardProps
             {/* Main image with parallax/Ken Burns effect on hover */}
             <motion.img
               src={imageUrl}
-              alt={scene.title}
+              alt={`AI-generated scene of ${scene.concept}`}
               className="w-full h-full object-cover"
               animate={{
                 scale: isHovered ? 1.15 : 1,
@@ -133,18 +133,19 @@ export function SceneCard({ scene, onDelete, canDelete = false }: SceneCardProps
         
         {/* Top Right Actions (Hidden until hover) */}
         <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 transform translate-y-2 group-hover:translate-y-0">
-          <button className="p-2 rounded-full bg-white/10 backdrop-blur-md hover:bg-white/20 text-white transition-colors">
-            <Heart size={14} />
+          <button aria-label="Like this scene" className="p-2 rounded-full bg-white/10 backdrop-blur-md hover:bg-white/20 text-white transition-colors">
+            <Heart size={14} aria-hidden="true" />
           </button>
-          <button className="p-2 rounded-full bg-white/10 backdrop-blur-md hover:bg-white/20 text-white transition-colors">
-            <Share2 size={14} />
+          <button aria-label="Share this scene" className="p-2 rounded-full bg-white/10 backdrop-blur-md hover:bg-white/20 text-white transition-colors">
+            <Share2 size={14} aria-hidden="true" />
           </button>
           {canDelete && onDelete && (
-            <button 
+            <button
               onClick={handleDelete}
+              aria-label={`Delete ${scene.title}`}
               className="p-2 rounded-full bg-red-500/20 backdrop-blur-md hover:bg-red-500/40 text-red-200 transition-colors"
             >
-              <Trash2 size={14} />
+              <Trash2 size={14} aria-hidden="true" />
             </button>
           )}
         </div>

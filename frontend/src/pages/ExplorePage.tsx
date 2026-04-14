@@ -136,7 +136,7 @@ export function ExplorePage() {
   }
 
   return (
-    <div className="fixed inset-0">
+    <div className="fixed inset-0" id="main-content">
       {/* Fade overlay that fades out on entry */}
       <motion.div
         className="fixed inset-0 bg-black z-[60] pointer-events-none"

@@ -1,12 +1,26 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { LoadingScreen } from './components/LoadingScreen';
 import { LandingPage } from './pages/LandingPage';
-import { ExplorePage } from './pages/ExplorePage';
-import { LibraryPage } from './pages/LibraryPage';
-import { CreditsPage } from './pages/CreditsPage';
 import { useMetaTags } from './hooks/useMetaTags';
 import { useAuth } from './contexts/AuthContext';
 import { verifyCheckoutSession } from './lib/api';
+
+// Lazy-load heavy pages to keep initial bundle small
+// ExplorePage pulls in Three.js + SparkJS, LibraryPage has CloudBackground shader
+const ExplorePage = lazy(() => import('./pages/ExplorePage').then(m => ({ default: m.ExplorePage })));
+const LibraryPage = lazy(() => import('./pages/LibraryPage').then(m => ({ default: m.LibraryPage })));
+const CreditsPage = lazy(() => import('./pages/CreditsPage').then(m => ({ default: m.CreditsPage })));
+
+function PageLoadingFallback() {
+  return (
+    <div className="h-screen w-screen bg-black flex items-center justify-center" role="status" aria-label="Loading page">
+      <div className="text-center">
+        <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin mx-auto mb-4" />
+        <p className="font-mono text-white/60 text-sm">loading...</p>
+      </div>
+    </div>
+  );
+}
 
 type Page = 'landing' | 'explore' | 'library' | 'credits';
 
@@ -149,11 +163,23 @@ export default function App() {
   // Route to appropriate page
   switch (currentPage) {
     case 'explore':
-      return <ExplorePage />;
+      return (
+        <Suspense fallback={<PageLoadingFallback />}>
+          <ExplorePage />
+        </Suspense>
+      );
     case 'library':
-      return <LibraryPage />;
+      return (
+        <Suspense fallback={<PageLoadingFallback />}>
+          <LibraryPage />
+        </Suspense>
+      );
     case 'credits':
-      return <CreditsPage />;
+      return (
+        <Suspense fallback={<PageLoadingFallback />}>
+          <CreditsPage />
+        </Suspense>
+      );
     case 'landing':
     default:
       return <LandingPage />;

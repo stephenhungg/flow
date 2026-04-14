@@ -4,11 +4,13 @@
 
 import { motion } from 'framer-motion';
 import { Sparkles, ArrowLeft } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { NavBar } from '../components/NavBar';
 import { getCreditPackages, createCheckoutSession, type CreditPackage } from '../lib/api';
-import { CloudBackground } from '../components/CloudBackground';
+
+// Lazy-load heavy GLSL cloud shader background
+const CloudBackground = lazy(() => import('../components/CloudBackground').then(m => ({ default: m.CloudBackground })));
 
 export function CreditsPage() {
   const { dbUser, getIdToken } = useAuth();
@@ -59,8 +61,10 @@ export function CreditsPage() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden">
-      <CloudBackground />
+    <div className="min-h-screen relative overflow-hidden" id="main-content">
+      <Suspense fallback={<div className="fixed inset-0 bg-black" />}>
+        <CloudBackground />
+      </Suspense>
       
       <NavBar currentPage="home" />
 
@@ -75,9 +79,10 @@ export function CreditsPage() {
           >
             <button
               onClick={navigateBack}
+              aria-label="Go back to home page"
               className="flex items-center gap-2 text-white/60 hover:text-white transition-colors mb-6 font-mono text-sm"
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft className="w-4 h-4" aria-hidden="true" />
               <span>back</span>
             </button>
 

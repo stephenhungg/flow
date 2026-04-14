@@ -3,10 +3,12 @@
  * WebGL light pillars + contextual AI messages
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { PipelineStage } from '../hooks/usePipelineSocket';
-import LightPillar from './LightPillar';
+
+// Lazy-load LightPillar (uses Three.js) to avoid loading 3D libs until needed
+const LightPillar = lazy(() => import('./LightPillar'));
 
 interface GenerationLoadingScreenProps {
   stage: PipelineStage;
@@ -143,20 +145,22 @@ export function GenerationLoadingScreen({
   const stageIndex = ['orchestrating', 'generating_image', 'creating_world', 'loading_splat', 'complete'].indexOf(stage);
 
   return (
-    <div className="fixed inset-0 overflow-hidden bg-black">
+    <div className="fixed inset-0 overflow-hidden bg-black" role="status" aria-live="polite" aria-label="World generation progress">
       {/* Light Pillar Background */}
-      <LightPillar
-        topColor="#8B5CF6"
-        bottomColor="#3B82F6"
-        intensity={0.5}
-        rotationSpeed={0.2}
-        glowAmount={0.008}
-        pillarWidth={2.5}
-        pillarHeight={0.5}
-        noiseIntensity={0.3}
-        mixBlendMode="screen"
-        className="opacity-40"
-      />
+      <Suspense fallback={<div className="absolute inset-0 bg-black" />}>
+        <LightPillar
+          topColor="#8B5CF6"
+          bottomColor="#3B82F6"
+          intensity={0.5}
+          rotationSpeed={0.2}
+          glowAmount={0.008}
+          pillarWidth={2.5}
+          pillarHeight={0.5}
+          noiseIntensity={0.3}
+          mixBlendMode="screen"
+          className="opacity-40"
+        />
+      </Suspense>
 
       {/* Radial gradient breathing animation */}
       <div 
@@ -223,8 +227,9 @@ export function GenerationLoadingScreen({
                 >
                   constructing reality
                 </motion.p>
-                <h1 
+                <h1
                   className="text-4xl md:text-5xl lg:text-6xl font-light text-white tracking-tight font-mono leading-tight"
+                  aria-label={`Generating world: ${concept}`}
                 >
                   {glitchText}
                 </h1>
@@ -241,7 +246,7 @@ export function GenerationLoadingScreen({
                 className="w-full"
               >
                 {/* Progress bar */}
-                <div className="h-[3px] bg-white/10 rounded-full overflow-hidden">
+                <div className="h-[3px] bg-white/10 rounded-full overflow-hidden" role="progressbar" aria-valuenow={Math.round(progress)} aria-valuemin={0} aria-valuemax={100} aria-label={`Generation progress: ${Math.round(progress)}%`}>
                   <motion.div
                     className="h-full rounded-full"
                     style={{ 
@@ -275,6 +280,7 @@ export function GenerationLoadingScreen({
                   {onCancel && stage !== 'complete' && stage !== 'error' && (
                     <motion.button
                       onClick={onCancel}
+                      aria-label="Cancel world generation"
                       className="px-3 py-1.5 rounded-md font-mono text-xs text-white/60 hover:text-white transition-all hover:scale-105"
                       style={{
                         background: 'rgba(255, 255, 255, 0.05)',
@@ -374,7 +380,7 @@ export function GenerationLoadingScreen({
                     >
                       <img
                         src={`data:${generatedImageMime || 'image/png'};base64,${generatedImage}`}
-                        alt="Generated scene"
+                        alt={`AI-generated scene depicting ${concept}`}
                         className="w-full aspect-video object-cover"
                         style={{
                           filter: stageIndex >= 2 ? 'brightness(0.78) saturate(1.15)' : 'none',
@@ -440,7 +446,7 @@ export function GenerationLoadingScreen({
                 className="h-[2px] bg-blue-500 mx-auto mb-8"
                 style={{ boxShadow: '0 0 20px rgba(59, 130, 246, 0.5)' }}
               />
-              <h2 className="text-3xl font-light text-white mb-3 tracking-tight font-mono">
+              <h2 className="text-3xl font-light text-white mb-3 tracking-tight font-mono" aria-live="assertive">
                 world ready
               </h2>
               <p className="text-white/40 font-mono text-sm">
@@ -502,6 +508,7 @@ export function GenerationLoadingScreen({
                 {onRetry && (
                   <button
                     onClick={onRetry}
+                    aria-label="Retry world generation"
                     className="px-6 py-2.5 rounded-lg font-mono text-sm text-white transition-all hover:scale-105"
                     style={{
                       background: 'rgba(59, 130, 246, 0.2)',
@@ -514,6 +521,7 @@ export function GenerationLoadingScreen({
                 {onExit && (
                   <button
                     onClick={onExit}
+                    aria-label="Go back to home"
                     className="px-6 py-2.5 rounded-lg font-mono text-sm text-white/60 transition-all hover:text-white hover:scale-105"
                     style={{
                       background: 'rgba(255, 255, 255, 0.05)',

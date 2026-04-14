@@ -3,17 +3,19 @@
  * Tilted 3D cards with expandable detail view
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { NavBar } from '../components/NavBar';
 import { useAuth } from '../contexts/AuthContext';
 import { listScenes, deleteScene, getMyScenes, generateSceneDescription, generateSceneThumbnail, type Scene, type PaginatedScenes } from '../lib/api';
 import { Search, Grid, User, Sparkles, X, Play, Eye, Calendar, Trash2, Upload, Github, Trophy } from 'lucide-react';
-import { CloudBackground } from '../components/CloudBackground';
 import { useOutsideClick } from '../hooks/useOutsideClick';
 import { TiltedCard } from '../components/TiltedCard';
 import { UploadSceneModal } from '../components/UploadSceneModal';
 import { ThumbnailPlaceholder } from '../components/ThumbnailPlaceholder';
+
+// Lazy-load heavy GLSL cloud shader background
+const CloudBackground = lazy(() => import('../components/CloudBackground').then(m => ({ default: m.CloudBackground })));
 
 type Tab = 'public' | 'my-scenes';
 
@@ -134,6 +136,45 @@ export function LibraryPage() {
 
   // Close on outside click
   useOutsideClick(expandedRef, () => setActiveScene(null));
+
+  // Keyboard navigation for scene cards (arrow keys)
+  const handleSceneCardKeyDown = useCallback((e: React.KeyboardEvent, scene: Scene, index: number) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      setActiveScene(scene);
+      return;
+    }
+
+    const cards = document.querySelectorAll<HTMLElement>('[data-scene-card]');
+    if (!cards.length) return;
+
+    let targetIndex = -1;
+    if (e.key === 'ArrowRight') targetIndex = Math.min(index + 1, cards.length - 1);
+    else if (e.key === 'ArrowLeft') targetIndex = Math.max(index - 1, 0);
+    else if (e.key === 'ArrowDown') {
+      // Count cards in first row to get actual column count
+      const firstRect = cards[0].getBoundingClientRect();
+      let actualCols = 1;
+      for (let i = 1; i < cards.length; i++) {
+        if (cards[i].getBoundingClientRect().top > firstRect.top + 5) break;
+        actualCols++;
+      }
+      targetIndex = Math.min(index + actualCols, cards.length - 1);
+    } else if (e.key === 'ArrowUp') {
+      const firstRect = cards[0].getBoundingClientRect();
+      let actualCols = 1;
+      for (let i = 1; i < cards.length; i++) {
+        if (cards[i].getBoundingClientRect().top > firstRect.top + 5) break;
+        actualCols++;
+      }
+      targetIndex = Math.max(index - actualCols, 0);
+    }
+
+    if (targetIndex >= 0 && targetIndex !== index) {
+      e.preventDefault();
+      cards[targetIndex].focus();
+    }
+  }, []);
 
   const [tab, setTab] = useState<Tab>('public');
   const [publicScenes, setPublicScenes] = useState<Scene[]>([]);
@@ -269,12 +310,15 @@ export function LibraryPage() {
   );
 
   return (
-    <div 
+    <div
       className="min-h-screen text-white relative"
+      id="main-content"
       style={{ background: 'transparent' }}
     >
       {/* Cloud Background */}
-      <CloudBackground />
+      <Suspense fallback={<div className="fixed inset-0 bg-black" />}>
+        <CloudBackground />
+      </Suspense>
 
       {/* Vignette */}
       <motion.div
@@ -311,10 +355,11 @@ export function LibraryPage() {
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
+              aria-label="Close scene details"
               className="absolute top-6 right-6 flex items-center justify-center bg-white/10 backdrop-blur-md rounded-full h-12 w-12 border border-white/20 hover:bg-white/20 transition-colors z-50"
               onClick={() => setActiveScene(null)}
             >
-              <X className="h-6 w-6 text-white" />
+              <X className="h-6 w-6 text-white" aria-hidden="true" />
             </motion.button>
 
             <motion.div
@@ -330,7 +375,7 @@ export function LibraryPage() {
                 {activeScene.thumbnailUrl ? (
                   <img
                     src={activeScene.thumbnailUrl}
-                    alt={activeScene.title}
+                    alt={`AI-generated scene of ${activeScene.concept}`}
                     className="w-full h-full object-cover"
                   />
                 ) : (
@@ -357,9 +402,10 @@ export function LibraryPage() {
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => handleEnterWorld(activeScene)}
+                    aria-label={`Enter ${activeScene.title} world`}
                     className="flex-1 px-6 py-4 rounded-xl font-mono text-sm font-light bg-blue-500 hover:bg-blue-400 text-white transition-colors flex items-center justify-center gap-3"
                   >
-                    <Play className="w-5 h-5 fill-white" />
+                    <Play className="w-5 h-5 fill-white" aria-hidden="true" />
                     Enter World
                   </motion.button>
                 </div>
@@ -423,9 +469,10 @@ export function LibraryPage() {
                         handleDelete(activeScene._id);
                       }
                     }}
+                    aria-label={`Delete ${activeScene.title}`}
                     className="flex items-center gap-2 text-red-400/70 hover:text-red-400 text-sm font-mono transition-colors"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-4 h-4" aria-hidden="true" />
                     Delete this world
                   </button>
                 )}
@@ -457,9 +504,10 @@ export function LibraryPage() {
             <div className="relative" ref={searchRef}>
               <div className="relative">
                 <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
-                <input 
-                  type="text" 
-                  placeholder="search worlds, creators, concepts..." 
+                <input
+                  type="text"
+                  placeholder="search worlds, creators, concepts..."
+                  aria-label="Search worlds, creators, and concepts"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onFocus={() => setShowSuggestions(true)}
@@ -468,6 +516,7 @@ export function LibraryPage() {
                 {searchQuery && (
                   <button
                     onClick={() => setSearchQuery('')}
+                    aria-label="Clear search"
                     className="absolute right-5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70 transition-colors"
                   >
                     ×
@@ -515,16 +564,19 @@ export function LibraryPage() {
 
         {/* Tabs */}
         <div className="px-6 mb-6">
-          <div className="max-w-7xl mx-auto flex items-center justify-center gap-2">
+          <div className="max-w-7xl mx-auto flex items-center justify-center gap-2" role="tablist" aria-label="Scene filters">
             <button
               onClick={() => { setTab('public'); setPage(1); }}
+              role="tab"
+              aria-selected={tab === 'public'}
+              aria-label="Show all public worlds"
               className={`px-5 py-2.5 rounded-full text-sm font-mono transition-all flex items-center gap-2 ${
-                tab === 'public' 
-                  ? 'bg-white/10 text-white border border-white/20' 
+                tab === 'public'
+                  ? 'bg-white/10 text-white border border-white/20'
                   : 'text-white/40 hover:text-white/60 border border-transparent hover:border-white/10'
               }`}
             >
-              <Grid size={14} />
+              <Grid size={14} aria-hidden="true" />
               all worlds
             </button>
             
@@ -532,13 +584,16 @@ export function LibraryPage() {
               <>
                 <button
                   onClick={() => setTab('my-scenes')}
+                  role="tab"
+                  aria-selected={tab === 'my-scenes'}
+                  aria-label="Show my worlds"
                   className={`px-5 py-2.5 rounded-full text-sm font-mono transition-all flex items-center gap-2 ${
-                    tab === 'my-scenes' 
-                      ? 'bg-white/10 text-white border border-white/20' 
+                    tab === 'my-scenes'
+                      ? 'bg-white/10 text-white border border-white/20'
                       : 'text-white/40 hover:text-white/60 border border-transparent hover:border-white/10'
                   }`}
                 >
-                  <User size={14} />
+                  <User size={14} aria-hidden="true" />
                   my worlds
                   <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded-full">
                     {myScenes.length}
@@ -547,9 +602,10 @@ export function LibraryPage() {
                 {tab === 'my-scenes' && (
                   <button
                     onClick={() => setShowUploadModal(true)}
+                    aria-label="Upload a .spz scene file"
                     className="px-5 py-2.5 rounded-full text-sm font-mono transition-all flex items-center gap-2 bg-blue-500 hover:bg-blue-400 text-white border border-blue-400"
                   >
-                    <Upload size={14} />
+                    <Upload size={14} aria-hidden="true" />
                     upload .spz
                   </button>
                 )}
@@ -559,7 +615,7 @@ export function LibraryPage() {
         </div>
 
         {/* Content */}
-        <main className="flex-1 px-6 pb-20">
+        <main className="flex-1 px-6 pb-20" role="tabpanel" aria-label={`${tab === 'public' ? 'All worlds' : 'My worlds'} list`}>
           <div className="max-w-7xl mx-auto">
             
             {error && (
@@ -633,6 +689,12 @@ export function LibraryPage() {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: index * 0.05, duration: 0.5 }}
                         className="group"
+                        data-scene-card
+                        data-scene-id={scene._id}
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`View ${scene.title} - ${scene.concept}. ${scene.viewCount} views.`}
+                        onKeyDown={(e) => handleSceneCardKeyDown(e, scene, index)}
                       >
                         <TiltedCard
                           imageSrc={scene.thumbnailUrl || undefined}

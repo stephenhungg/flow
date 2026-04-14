@@ -1,13 +1,15 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, Type, ArrowRight, ChevronDown, Sparkles } from 'lucide-react';
-import { ShaderBackground } from '../components/ShaderBackground';
 import { DecryptedText } from '../components/DecryptedText';
 import { Footer } from '../components/Footer';
 import { TechStack } from '../components/TechStack';
 import { NavBar } from '../components/NavBar';
 import { TypingTagline } from '../components/TypingTagline';
 import { RotatingPlaceholder } from '../components/RotatingPlaceholder';
+
+// Lazy-load heavy GLSL shader background to reduce initial bundle
+const ShaderBackground = lazy(() => import('../components/ShaderBackground').then(m => ({ default: m.ShaderBackground })));
 
 type InputMode = 'voice' | 'text';
 type QualityMode = 'quick' | 'standard' | 'premium';
@@ -192,9 +194,11 @@ export function LandingPage() {
   };
 
   return (
-    <div className="h-screen w-screen overflow-hidden relative">
+    <div className="h-screen w-screen overflow-hidden relative" id="main-content">
       {/* Shader Background - zooms in when transitioning */}
-      <ShaderBackground scale={isZooming ? 8 : 1} />
+      <Suspense fallback={<div className="fixed inset-0 bg-black" />}>
+        <ShaderBackground scale={isZooming ? 8 : 1} />
+      </Suspense>
 
       {/* Vignette */}
       <motion.div
@@ -276,9 +280,11 @@ export function LandingPage() {
           >
             <motion.button
               onClick={() => handleModeSwitch('voice')}
+              aria-label="Switch to voice input mode"
+              aria-pressed={inputMode === 'voice'}
               className={`glass rounded-full px-5 py-2.5 text-sm font-mono transition-all duration-300 flex items-center gap-2 cursor-pointer ${
-                inputMode === 'voice' 
-                  ? 'glass-strong text-white border-2 border-white/60 shadow-lg' 
+                inputMode === 'voice'
+                  ? 'glass-strong text-white border-2 border-white/60 shadow-lg'
                   : 'text-white/70 hover:text-white hover:bg-white/20 hover:shadow-md'
               }`}
               whileHover={{ scale: 1.05 }}
@@ -289,9 +295,11 @@ export function LandingPage() {
             </motion.button>
             <motion.button
               onClick={() => handleModeSwitch('text')}
+              aria-label="Switch to text input mode"
+              aria-pressed={inputMode === 'text'}
               className={`glass rounded-full px-5 py-2.5 text-sm font-mono transition-all duration-300 flex items-center gap-2 cursor-pointer ${
-                inputMode === 'text' 
-                  ? 'glass-strong text-white border-2 border-white/60 shadow-lg' 
+                inputMode === 'text'
+                  ? 'glass-strong text-white border-2 border-white/60 shadow-lg'
                   : 'text-white/70 hover:text-white hover:bg-white/20 hover:shadow-md'
               }`}
               whileHover={{ scale: 1.05 }}
@@ -310,9 +318,10 @@ export function LandingPage() {
               transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
               className="mt-12 flex items-center justify-center gap-4"
             >
-              <motion.div
+              <motion.button
                 className={`relative flex items-center justify-center w-14 h-14 rounded-full cursor-pointer transition-all duration-300 ${isListening ? 'glass-strong' : 'glass hover:bg-white/20'}`}
                 onClick={handleMicClick}
+                aria-label={isListening && voiceTranscript.trim() ? 'Submit voice input' : isListening ? 'Stop listening' : 'Start voice input'}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
@@ -325,7 +334,7 @@ export function LandingPage() {
                     className="absolute inset-0 rounded-full border-2 border-white"
                   />
                 )}
-              </motion.div>
+              </motion.button>
 
               <div className="glass rounded-full px-8 py-4 w-[400px] md:w-[480px] h-[3.5rem] flex items-center justify-center">
                 {isListening ? (
@@ -367,6 +376,7 @@ export function LandingPage() {
                       type="text"
                       value={textInput}
                       onChange={(e) => setTextInput(e.target.value)}
+                      aria-label="Enter a concept to explore in 3D"
                       className="relative w-full h-full bg-transparent border-none outline-none font-mono text-base text-white text-glow placeholder-transparent"
                       style={{ letterSpacing: '0.02em' }}
                       autoFocus
@@ -375,6 +385,7 @@ export function LandingPage() {
                   <motion.button
                     type="submit"
                     disabled={!textInput.trim()}
+                    aria-label="Submit concept"
                     className={`flex-shrink-0 transition-all duration-300 ${
                       textInput.trim()
                         ? 'text-white cursor-pointer hover:text-white/80'
@@ -400,6 +411,8 @@ export function LandingPage() {
             <motion.button
               type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
+              aria-expanded={showAdvanced}
+              aria-label="Toggle advanced generation options"
               className="flex items-center gap-2 text-white/40 hover:text-white/70 transition-colors font-mono text-xs"
               whileHover={{ scale: 1.02 }}
             >
@@ -454,6 +467,8 @@ export function LandingPage() {
                               key={mode}
                               type="button"
                               onClick={() => setQualityMode(mode)}
+                              aria-label={`${label} quality: ${desc}, ${cost}`}
+                              aria-pressed={qualityMode === mode}
                               className={`relative rounded-lg p-3 text-left transition-all ${
                                 qualityMode === mode
                                   ? 'glass-strong border-2 border-white/60'

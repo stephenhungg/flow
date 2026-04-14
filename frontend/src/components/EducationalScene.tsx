@@ -334,10 +334,17 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, s
     }
   }, [mode, thumbnailDataUrl, pipeline.splatUrl, savedSceneId, autoSaveToLibrary]);
 
-  // Handle scene ready
+  // Handle scene ready - move focus to the 3D scene container
   const handleSceneReady = useCallback(() => {
     console.log('✅ [SCENE] 3D scene ready');
     setMode('in_scene');
+    // Move focus to the 3D scene for accessibility
+    requestAnimationFrame(() => {
+      const sceneContainer = document.querySelector<HTMLElement>('[data-scene-container]');
+      if (sceneContainer) {
+        sceneContainer.focus();
+      }
+    });
   }, []);
 
   // Handle screenshot captured
@@ -425,6 +432,9 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, s
         <motion.div
           key="scene-loading"
           className="fixed inset-0 z-50"
+          data-scene-container
+          tabIndex={-1}
+          aria-label={`3D scene: ${concept}`}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -489,6 +499,7 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, s
             {onExit && (
               <motion.button
                 onClick={handleCancel}
+                aria-label="Exit 3D scene"
                 className="glass px-4 py-2 rounded-full font-mono text-sm text-white hover:bg-white/30 transition-colors"
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -562,14 +573,17 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, s
       <motion.div
         key="scene-in"
         className="fixed inset-0 z-50"
+        data-scene-container
+        tabIndex={-1}
+        aria-label={`3D scene: ${concept}`}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
       >
-      <FirstPersonScene 
+      <FirstPersonScene
           ref={sceneRef}
-        splatUrl={splatUrl} 
+        splatUrl={splatUrl}
           colliderMeshUrl={colliderMeshUrl}
         onSceneReady={handleSceneReady}
           onScreenshotCaptured={handleScreenshotCaptured}
@@ -618,6 +632,7 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, s
         {onExit && (
           <motion.button
             onClick={onExit}
+            aria-label="Exit 3D scene"
             className="glass px-4 py-2 rounded-full font-mono text-sm text-white hover:bg-white/30 transition-colors"
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}

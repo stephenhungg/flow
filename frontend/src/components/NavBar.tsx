@@ -48,11 +48,14 @@ export function NavBar({ currentPage = 'home' }: NavBarProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.8, ease: 'easeOut' }}
       className="fixed top-6 left-1/2 transform -translate-x-1/2 z-50"
+      aria-label="Main navigation"
     >
-      <div className="glass rounded-full px-4 py-2 flex items-center gap-3 shadow-lg">
+      <div className="glass rounded-full px-4 py-2 flex items-center gap-3 shadow-lg" role="menubar">
         {/* Home */}
         <motion.button
           onClick={navigateToHome}
+          role="menuitem"
+          aria-current={currentPage === 'home' ? 'page' : undefined}
           className={`flex items-center gap-2 px-4 py-2 rounded-full font-mono text-sm transition-all ${
             currentPage === 'home'
               ? 'glass-strong text-white'
@@ -61,13 +64,15 @@ export function NavBar({ currentPage = 'home' }: NavBarProps) {
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
         >
-          <Home className="w-4 h-4" />
+          <Home className="w-4 h-4" aria-hidden="true" />
           <span>home</span>
         </motion.button>
 
         {/* Library */}
         <motion.button
           onClick={navigateToLibrary}
+          role="menuitem"
+          aria-current={currentPage === 'library' ? 'page' : undefined}
           className={`flex items-center gap-2 px-4 py-2 rounded-full font-mono text-sm transition-all ${
             currentPage === 'library'
               ? 'glass-strong text-white'
@@ -76,7 +81,7 @@ export function NavBar({ currentPage = 'home' }: NavBarProps) {
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
         >
-          <Library className="w-4 h-4" />
+          <Library className="w-4 h-4" aria-hidden="true" />
           <span>library</span>
         </motion.button>
 
@@ -93,13 +98,14 @@ export function NavBar({ currentPage = 'home' }: NavBarProps) {
             {/* Credits Balance */}
             <motion.button
               onClick={navigateToCredits}
+              aria-label={`Credits: ${dbUser.credits === Infinity ? 'unlimited' : (dbUser.credits || 0)}. Buy more credits.`}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/20 hover:bg-purple-500/30 border border-purple-400/30 font-mono text-xs text-purple-200 transition-all ${
                 currentPage === 'credits' ? 'bg-purple-500/40 border-purple-400/50' : ''
               }`}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
-              <Sparkles className="w-3 h-3" />
+              <Sparkles className="w-3 h-3" aria-hidden="true" />
               <span>
                 {dbUser.credits === Infinity ? '∞' : (dbUser.credits || 0)} credits
               </span>
@@ -124,11 +130,12 @@ export function NavBar({ currentPage = 'home' }: NavBarProps) {
             {/* Sign Out */}
             <motion.button
               onClick={handleSignOut}
+              aria-label="Sign out"
               className="flex items-center gap-2 px-3 py-1.5 rounded-full font-mono text-xs text-white/70 hover:text-white hover:bg-white/10 transition-all"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
-              <LogOut className="w-3.5 h-3.5" />
+              <LogOut className="w-3.5 h-3.5" aria-hidden="true" />
             </motion.button>
           </div>
         ) : (

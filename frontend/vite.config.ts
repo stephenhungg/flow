@@ -12,6 +12,16 @@ export default defineConfig({
   },
   build: {
     sourcemap: false, // Disable source maps in production to avoid blob URL issues
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Split heavy 3D libraries into separate chunks so they're only loaded when needed
+          'three-vendor': ['three'],
+          'spark-vendor': ['@sparkjsdev/spark'],
+          'firebase-vendor': ['firebase/app', 'firebase/auth'],
+        },
+      },
+    },
   },
 })
 

@@ -812,7 +812,7 @@ export const FirstPersonScene = forwardRef<FirstPersonSceneHandle, FirstPersonSc
       
       {/* Loading overlay */}
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/80">
+        <div className="absolute inset-0 flex items-center justify-center bg-black/80" role="status" aria-label="Loading 3D scene">
           <div className="text-center">
             <div className="flex items-center justify-center gap-2 mb-4">
               <div className="w-2 h-2 bg-white/60 rounded-full animate-pulse" />
@@ -856,6 +856,10 @@ export const FirstPersonScene = forwardRef<FirstPersonSceneHandle, FirstPersonSc
         <div
           className="absolute inset-0 flex items-center justify-center cursor-pointer"
           onClick={requestLock}
+          role="button"
+          tabIndex={0}
+          aria-label="Click to enter first-person exploration mode"
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); requestLock(); } }}
         >
           <div className="glass px-8 py-6 rounded-xl text-center animate-pulse">
             <p className="font-mono text-white text-lg mb-2">👆 click anywhere to explore</p>
