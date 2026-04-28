@@ -74,7 +74,7 @@ export function EducationalScene({ concept, savedSplatUrl, savedOrchestration, s
 
         // Check for SAVED splat from library (already generated)
         if (savedSplatUrl) {
-          // Use proxy to bypass CORS for Vultr URLs
+          // Use proxy to bypass CORS for storage URLs
           const proxiedUrl = getProxiedSplatUrl(savedSplatUrl);
           console.log('✅ [PIPELINE] Using SAVED splat from library:', savedSplatUrl);
           console.log('✅ [PIPELINE] Proxied URL:', proxiedUrl);

@@ -13,7 +13,7 @@ import {
   SiGoogle,
   SiMongodb,
   SiSocketdotio,
-  SiVultr,
+  SiRailway,
   SiVercel,
 } from 'react-icons/si';
 import { Sparkles, Wand2, Waves, Mic } from 'lucide-react';
@@ -27,7 +27,7 @@ const techStack = [
   { icon: SiFirebase, title: 'Firebase', href: 'https://firebase.google.com', color: '#FFCA28' },
   { icon: SiGoogle, title: 'Gemini AI', href: 'https://deepmind.google/technologies/gemini/', color: '#4285F4' },
   { icon: SiMongodb, title: 'MongoDB', href: 'https://www.mongodb.com', color: '#47A248' },
-  { icon: SiVultr, title: 'Vultr', href: 'https://www.vultr.com', color: '#007BFC' },
+  { icon: SiRailway, title: 'Railway', href: 'https://railway.com', color: '#893FF2' },
   { icon: SiVercel, title: 'Vercel', href: 'https://vercel.com', color: '#FFFFFF' },
   { icon: SiSocketdotio, title: 'Socket.IO', href: 'https://socket.io', color: '#010101' },
   { icon: Wand2, title: 'World Labs', href: 'https://www.worldlabs.ai', color: '#FF6B6B' },
